@@ -1,9 +1,9 @@
 import test from 'ava'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-import { normalizeCvToPdf, imageToWebp } from '../index'
+import { imageToWebp, normalizeCvToPdf } from '../index'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -42,7 +42,7 @@ test('normalizeCvToPdf converts PNG image buffer to a PDF', (t) => {
 })
 
 test('imageToWebp converts a real PNG fixture to WebP', (t) => {
-  const pngPath = path.join(__dirname, 'fixtures', 'BON-CADEAU-Stage-de-pêche-2.png')
+  const pngPath = path.join(__dirname, 'image.jpg')
   const pngBuffer = readFileSync(pngPath)
 
   const out = imageToWebp(pngBuffer) as Array<number>
