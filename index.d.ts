@@ -3,8 +3,10 @@
 /**
  * Normalize a CV file to PDF and optionally compress it.
  *
- * V1 implementation is a no-op: it just echoes back the input bytes.
- * This lets us validate the NAPI-RS wiring and integration from Node/Strapi
- * before implementing the real image/PDF/DOCX pipeline.
+ * V1 behavior:
+ * - If the mime type is a supported image (`image/png`, `image/jpeg`, `image/jpg`),
+ *   the image is decoded, optionally downscaled, recompressed as JPEG,
+ *   and wrapped into a single-page PDF.
+ * - For any other mime type, the input bytes are returned unchanged.
  */
-export declare function normalizeCvToPdf(bytes: Uint8Array, mime: string): Uint8Array
+export declare function normalizeCvToPdf(bytes: Array<number>, mime: string): Array<number>

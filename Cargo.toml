@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 [dependencies]
 napi = "3.0.0"
 napi-derive = "3.0.0"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [build-dependencies]
 napi-build = "2"
