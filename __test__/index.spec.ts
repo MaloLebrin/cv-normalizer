@@ -2,14 +2,19 @@ import test from 'ava'
 
 import { normalizeCvToPdf } from '../index'
 
-test('normalizeCvToPdf echoes back bytes for valid PDF (no-op for now)', (t) => {
+test('normalizeCvToPdf returns a valid PDF for PDF input (may be optimized)', (t) => {
   const input = new Uint8Array(Buffer.from('%PDF-1.4\nHello\n', 'ascii'))
 
   const output = normalizeCvToPdf(input, 'application/pdf') as Array<number>
 
   t.true(Array.isArray(output))
-  t.is(output.length, input.length)
-  t.deepEqual(output, Array.from(input))
+  t.true(output.length > 0)
+
+  const outBuf = Buffer.from(output)
+  const header = outBuf.subarray(0, 4).toString('ascii')
+
+  t.is(header, '%PDF')
+  t.true(outBuf.length <= input.length)
 })
 
 test('normalizeCvToPdf converts PNG image buffer to a PDF', (t) => {

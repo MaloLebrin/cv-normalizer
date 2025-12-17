@@ -1,6 +1,7 @@
 #![deny(clippy::all)]
 
 use std::io::{Cursor, Write as IoWrite};
+use std::process::Command;
 
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
@@ -8,6 +9,7 @@ use image::{ColorType, DynamicImage, GenericImageView};
 use napi::bindgen_prelude::Uint8Array;
 use napi::{Error, Status};
 use napi_derive::napi;
+use tempfile::NamedTempFile;
 
 /// Normalize a CV file to PDF and optionally compress it.
 ///
@@ -24,13 +26,16 @@ pub fn normalize_cv_to_pdf(bytes: Uint8Array, mime: String) -> napi::Result<Vec<
   let mime_lc = mime.to_ascii_lowercase();
   let input = bytes.to_vec();
 
-  // PDF: validate header, keep bytes as-is for now.
+  // PDF: validate header, then try to optimize; fall back to original on any failure.
   if is_pdf_mime(&mime_lc) {
     if !input.starts_with(b"%PDF-") {
       return Err(Error::new(
         Status::InvalidArg,
         "Input declared as application/pdf but does not start with %PDF- header",
       ));
+    }
+    if let Some(optimized) = try_optimize_pdf_with_ghostscript(&input) {
+      return Ok(optimized);
     }
     return Ok(input);
   }
@@ -102,6 +107,46 @@ fn encode_to_jpeg(img: DynamicImage, quality: u8) -> Result<Vec<u8>, image::Imag
   }
 
   Ok(jpeg_bytes)
+}
+
+/// Try to optimize/compress a PDF using Ghostscript (`gs`) if available.
+///
+/// - Returns `Some(optimized_bytes)` when optimization succeeds and the result is strictly smaller.
+/// - Returns `None` if Ghostscript is not available or any step fails (callers should fall back to
+///   the original bytes).
+fn try_optimize_pdf_with_ghostscript(input: &[u8]) -> Option<Vec<u8>> {
+  // Create temporary input file
+  let mut in_file = NamedTempFile::new().ok()?;
+  IoWrite::write_all(&mut in_file, input).ok()?;
+
+  // Create temporary output file
+  let out_file = NamedTempFile::new().ok()?;
+  let out_path = out_file.path().to_path_buf();
+
+  // Run Ghostscript to recompress the PDF.
+  // -dPDFSETTINGS=/screen is an aggressive but reasonable default for CVs.
+  let status = Command::new("gs")
+    .arg("-sDEVICE=pdfwrite")
+    .arg("-dCompatibilityLevel=1.4")
+    .arg("-dPDFSETTINGS=/screen")
+    .arg("-dNOPAUSE")
+    .arg("-dQUIET")
+    .arg("-dBATCH")
+    .arg(format!("-sOutputFile={}", out_path.to_string_lossy()))
+    .arg(in_file.path())
+    .status()
+    .ok()?;
+
+  if !status.success() {
+    return None;
+  }
+
+  let optimized = std::fs::read(&out_path).ok()?;
+  if optimized.is_empty() || optimized.len() >= input.len() {
+    return None;
+  }
+
+  Some(optimized)
 }
 
 /// Build a minimal single-page PDF embedding the given JPEG bytes.
