@@ -1,151 +1,181 @@
 # `@malolebrin/cv-normalizer`
 
-Module natif (Rust + NAPI-RS) pour **normaliser et compresser des CV côté Node.js**.
+Native module (Rust + NAPI-RS) to **normalize and compress CV files on the Node.js side**.
 
-- **Images (`image/png`, `image/jpeg`, `image/jpg`)** → conversion en **PDF 1 page** : décodage, downscale basique, recompression JPEG, puis encapsulation dans un PDF minimal.  
-- **PDF (`application/pdf`, `application/x-pdf`)** → **validation du header `%PDF-`** puis retour des octets inchangés (hook prêt pour un futur pipeline d’optimisation PDF).  
-- **Autres mime types** → pour l’instant, **pass-through** (octets inchangés).
+- **Images (`image/png`, `image/jpeg`, `image/jpg`, `image/pjpeg`)** → converted to a **single-page PDF**: decode, basic downscale, JPEG recompression, and embedding into a minimal PDF.  
+- **PDF (`application/pdf`, `application/x-pdf`)** → **header validation (`%PDF-`)** and then **optional compression** using Ghostscript if available; falls back to the original bytes when optimization fails or is not beneficial.  
+- **Other mime types** → currently **pass-through** (bytes returned unchanged).  
+- **Standalone image transformation** → `imageToWebp` converts any supported image (PNG, JPEG, …) to **WebP** in memory (similar to the example on the [NAPI-RS homepage](https://napi.rs/)).
 
-Le module est pensé pour être appelé depuis un backend Node/Strapi au moment de la réception des CV.
+The module is designed to be called from a Node/Strapi backend when receiving CV files.
 
 ---
 
 ## Installation
 
-Une fois publié sur npm :
+Once published on npm:
 
 ```bash
 pnpm add @malolebrin/cv-normalizer
 ```
 
-En local dans ce repo :
+For local development in this repo:
 
 ```bash
 pnpm install
 pnpm build
 ```
 
-Le build génère le binaire natif `cv-normalizer.*.node` et le fichier de binding `index.js`.
+The build generates the native binary `cv-normalizer.*.node` and the JS binding file `index.js`.
 
 ---
 
-## API Node / TypeScript
+## Node / TypeScript API
 
-Signature générée (`index.d.ts`) :
+Generated signatures (`index.d.ts`):
 
 ```ts
 export declare function normalizeCvToPdf(
   bytes: Uint8Array,
   mime: string,
 ): number[]
+
+export declare function imageToWebp(
+  bytes: Uint8Array,
+): number[]
 ```
 
-Usage typique côté Node :
+Typical usage from Node:
 
 ```ts
-import { normalizeCvToPdf } from '@malolebrin/cv-normalizer'
+import { normalizeCvToPdf, imageToWebp } from '@malolebrin/cv-normalizer'
 
-// buffer: Buffer ou Uint8Array contenant le CV
+// buffer: Buffer or Uint8Array containing the CV/image
 // mime: string ('image/png', 'image/jpeg', 'application/pdf', etc.)
-const out = normalizeCvToPdf(buffer, mime)
+const pdfArray = normalizeCvToPdf(buffer, mime)
+const pdfBuffer = Buffer.from(pdfArray)
 
-// Le binding renvoie un Array<number>, on le remet en Buffer pour Node
-const pdfBuffer = Buffer.from(out)
+const webpArray = imageToWebp(buffer)
+const webpBuffer = Buffer.from(webpArray)
 ```
 
-### Comportement détaillé
+### `normalizeCvToPdf` behavior
 
 - **Images (`image/png`, `image/jpeg`, `image/jpg`, `image/pjpeg`)**  
-  - Décodage via la crate Rust `image`.  
-  - Downscale si nécessaire pour que le plus grand côté ≤ 2000 px.  
-  - Ré-encodage en JPEG (qualité ≈ 80).  
-  - Génération d’un **PDF 1 page** qui dessine l’image sur toute la page.
+  - Decoded via the Rust `image` crate.  
+  - Downscaled if needed so that the longest side ≤ 2000 px.  
+  - Re-encoded as JPEG (quality ≈ 80).  
+  - Embedded into a **single-page PDF** that draws the image over the whole page.
 
 - **PDF (`application/pdf`, `application/x-pdf`)**  
-  - Vérifie que les octets commencent par `"%PDF-"`.  
-  - Si ce n’est pas le cas → lève une erreur NAPI (`code: InvalidArg`).  
-  - Sinon → retourne les octets **tels quels** (future extension : recompression/optimisation PDF).
+  - Verifies that the bytes start with `"%PDF-"`.  
+  - If not → throws a NAPI error (`code: InvalidArg`).  
+  - If yes → tries to optimize/compress the PDF using the `gs` (Ghostscript) CLI with `-dPDFSETTINGS=/screen`.  
+    - If Ghostscript is not installed, the command fails, or the optimized file is not strictly smaller → returns the original bytes.  
+    - If optimization succeeds and produces a smaller file → returns the optimized bytes.
 
-- **Autres mime types**  
-  - Les octets sont simplement renvoyés inchangés.
+- **Other mime types**  
+  - Bytes are returned unchanged (no transformation).
+
+> **Note:** To benefit from PDF compression in production, the `gs` (Ghostscript) binary must be installed and available in the runtime environment.
+
+### `imageToWebp` behavior
+
+- Accepts any image format supported by the `image` crate (PNG, JPEG, …).  
+- Decodes the image from memory and re-encodes it as **WebP** using `ImageFormat::WebP`.  
+- Returns a `number[]` that can be turned into a Node `Buffer`.
+
+Example:
+
+```ts
+import { imageToWebp } from '@malolebrin/cv-normalizer'
+import { readFileSync, writeFileSync } from 'node:fs'
+
+const png = readFileSync('my-image.png')
+const webpArray = imageToWebp(png)
+const webpBuffer = Buffer.from(webpArray)
+
+writeFileSync('my-image.webp', webpBuffer)
+```
 
 ---
 
-## Script de démo en ligne de commande
+## CLI demo script
 
-Pour tester la normalisation sur de **vrais fichiers** (images ou PDF), un script simple est fourni :
+To try normalization on **real files** (images or PDFs), a small CLI script is provided:
 
 ```bash
 pnpm build
-pnpm demo /chemin/vers/mon_cv.png
-pnpm demo /chemin/vers/mon_cv.pdf
+pnpm demo /path/to/my_cv.png
+pnpm demo /path/to/my_cv.pdf
 ```
 
-Ce script (`scripts/normalize-file.cjs`) :
+This script (`scripts/normalize-file.cjs`):
 
-- détecte ou utilise le `mimeType` passé en argument,  
-- appelle `normalizeCvToPdf`,  
-- écrit un fichier de sortie `mon_cv.normalized.pdf` à côté du fichier d’entrée,  
-- affiche la taille avant/après et le pourcentage de gain (ou de croissance) de taille.
+- infers or uses the `mimeType` passed as a second argument,  
+- calls `normalizeCvToPdf`,  
+- writes an output file `<name>.normalized.pdf` next to the input file,  
+- prints original and output sizes and the relative size change.
 
-Usage détaillé :
+Detailed usage:
 
 ```bash
 node scripts/normalize-file.cjs <inputPath> [mimeType] [outputPath]
 ```
 
-Exemples :
+Examples:
 
 ```bash
-# Image PNG → PDF
+# PNG image → PDF
 node scripts/normalize-file.cjs ./fixtures/cv.png
 
-# Image JPEG avec mime explicite
+# JPEG image with explicit mime
 node scripts/normalize-file.cjs ./fixtures/cv.jpg image/jpeg
 
-# PDF existant (validation + pass-through)
+# Existing PDF (validation + optional compression via Ghostscript)
 node scripts/normalize-file.cjs ./fixtures/cv.pdf
 ```
 
 ---
 
-## Développement
+## Development
 
-### Prérequis
+### Prerequisites
 
-- **Rust** récent (édition 2021).  
-- **Node.js** ≥ 18 (la CI tourne aujourd’hui sur Node 20/22/24).  
-- **pnpm** (gestionnaire de paquets utilisé dans ce repo).
+- Recent **Rust** toolchain (edition 2021).  
+- **Node.js** ≥ 18 (CI currently runs on Node 20/22/24).  
+- **pnpm** as package manager.
 
-### Commandes principales
+### Main commands
 
 ```bash
-# Installer les dépendances JS
+# Install JS dependencies
 pnpm install
 
-# Build du module natif (toutes cibles activées dans package.json)
+# Build the native module (all targets configured in package.json)
 pnpm build
 
-# Lancer les tests (AVA)
+# Run tests (AVA)
 pnpm test
 
 # Lint JS/TS
 pnpm lint
 
-# Formatage Rust / JS / TOML
+# Format Rust / JS / TOML
 pnpm format
 ```
 
-Les tests actuels vérifient notamment :
+The current tests cover, among other things:
 
-- le comportement **no-op** sur un petit PDF valide,  
-- la remontée d’erreur NAPI (`InvalidArg`) sur une image PNG volontairement invalide (couverture du chemin d’erreur image).
+- behavior on a small valid PDF input (remains a valid PDF, not larger than the original),  
+- error mapping (`InvalidArg`) when decoding an intentionally invalid PNG (image error path),  
+- `imageToWebp` converting a real PNG fixture into a valid WebP file (checking `RIFF` and `WEBP` tags).
 
 ---
 
-## Intégration typique (Strapi / backend Node)
+## Typical integration (Strapi / Node backend)
 
-Dans un backend Node/Strapi, le pattern recommandé est :
+In a Node/Strapi backend, a recommended pattern is:
 
 ```ts
 import { normalizeCvToPdf } from '@malolebrin/cv-normalizer'
@@ -163,18 +193,21 @@ async function normalizeIncomingCv(file: { buffer: Buffer; mime: string }) {
 }
 ```
 
-Ce helper peut être appelé dans un **controller** ou un **lifecycle** Strapi juste avant la persistance du CV pour que tous les CV stockés soient déjà **en PDF normalisé**.
+This helper can be called from a **controller** or **lifecycle hook** right before persisting the CV so that all stored CVs are already **normalized to PDF**.
+
+If you also want to keep a **WebP thumbnail** version of the CV, you can additionally call `imageToWebp` on the original image buffer and store the result alongside the PDF.
 
 ---
 
 ## CI & Release
 
-- **CI GitHub Actions**  
-  - Build, lint et tests sont exécutés sur une matrice Node.js / OS (Linux, macOS, Windows) en utilisant **pnpm** pour les dépendances JS et `cargo` pour la partie Rust.  
-  - Les artefacts `.node` / `.wasm` sont prébuildés pour plusieurs plateformes via `@napi-rs/cli`.
+- **GitHub Actions CI**  
+  - Build, lint and tests are run on a Node.js / OS matrix (Linux, macOS, Windows) using **pnpm** for JS dependencies and `cargo` for the Rust side.  
+  - `.node` / `.wasm` artifacts are prebuilt for multiple platforms via `@napi-rs/cli`.
 
-- **Publication npm**  
-  - La publication est gérée via la CI à partir des tags git (`npm version` + `git push`).  
-  - Assure-toi d’avoir configuré `NPM_TOKEN` dans les secrets GitHub du repo.  
-  - Ne pas lancer `npm publish` manuellement : la pipeline GitHub Actions se charge de publier les packages précompilés.
+- **npm publishing**  
+  - Publishing is handled by CI from git tags (`npm version` + `git push`).  
+  - Make sure `NPM_TOKEN` is configured in the repo’s GitHub secrets.  
+  - Do **not** run `npm publish` manually: the GitHub Actions pipeline is responsible for publishing precompiled packages.
+
 
