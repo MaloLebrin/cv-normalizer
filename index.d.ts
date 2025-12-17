@@ -9,4 +9,4 @@
  *   and wrapped into a single-page PDF.
  * - For any other mime type, the input bytes are returned unchanged.
  */
-export declare function normalizeCvToPdf(bytes: Array<number>, mime: string): Array<number>
+export declare function normalizeCvToPdf(bytes: Uint8Array, mime: string): Array<number>

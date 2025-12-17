@@ -5,6 +5,7 @@ use std::io::{Cursor, Write as IoWrite};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use image::{ColorType, DynamicImage, GenericImageView};
+use napi::bindgen_prelude::Uint8Array;
 use napi::{Error, Status};
 use napi_derive::napi;
 
@@ -16,8 +17,9 @@ use napi_derive::napi;
 ///   and wrapped into a single-page PDF.
 /// - For any other mime type, the input bytes are returned unchanged.
 #[napi]
-pub fn normalize_cv_to_pdf(bytes: Vec<u8>, mime: String) -> napi::Result<Vec<u8>> {
+pub fn normalize_cv_to_pdf(bytes: Uint8Array, mime: String) -> napi::Result<Vec<u8>> {
   let mime_lc = mime.to_ascii_lowercase();
+  let input = bytes.to_vec();
 
   // Only handle images for now. Everything else is returned as-is.
   if !(mime_lc == "image/png"
@@ -25,10 +27,10 @@ pub fn normalize_cv_to_pdf(bytes: Vec<u8>, mime: String) -> napi::Result<Vec<u8>
     || mime_lc == "image/jpg"
     || mime_lc == "image/pjpeg")
   {
-    return Ok(bytes);
+    return Ok(input);
   }
 
-  let img = image::load_from_memory(&bytes).map_err(map_image_error)?;
+  let img = image::load_from_memory(&input).map_err(map_image_error)?;
 
   // Basic downscaling to avoid huge PDFs: keep longest side <= 2000px
   let max_side: u32 = 2000;
