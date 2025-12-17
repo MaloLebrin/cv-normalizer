@@ -572,4 +572,5 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.imageToWebp = nativeBinding.imageToWebp
 module.exports.normalizeCvToPdf = nativeBinding.normalizeCvToPdf

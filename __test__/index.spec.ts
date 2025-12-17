@@ -1,6 +1,12 @@
 import test from 'ava'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
-import { normalizeCvToPdf } from '../index'
+import { normalizeCvToPdf, imageToWebp } from '../index'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 test('normalizeCvToPdf returns a valid PDF for PDF input (may be optimized)', (t) => {
   const input = new Uint8Array(Buffer.from('%PDF-1.4\nHello\n', 'ascii'))
@@ -33,4 +39,21 @@ test('normalizeCvToPdf converts PNG image buffer to a PDF', (t) => {
 
   t.is(error?.code, 'InvalidArg')
   t.regex(error?.message ?? '', /Failed to process image for CV normalization/)
+})
+
+test('imageToWebp converts a real PNG fixture to WebP', (t) => {
+  const pngPath = path.join(__dirname, 'fixtures', 'BON-CADEAU-Stage-de-pêche-2.png')
+  const pngBuffer = readFileSync(pngPath)
+
+  const out = imageToWebp(pngBuffer) as Array<number>
+
+  t.true(Array.isArray(out))
+  const webpBuffer = Buffer.from(out)
+  t.true(webpBuffer.length > 0)
+
+  const riff = webpBuffer.subarray(0, 4).toString('ascii')
+  const webpTag = webpBuffer.subarray(8, 12).toString('ascii')
+
+  t.is(riff, 'RIFF')
+  t.is(webpTag, 'WEBP')
 })

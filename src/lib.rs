@@ -5,7 +5,7 @@ use std::process::Command;
 
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
-use image::{ColorType, DynamicImage, GenericImageView};
+use image::{ColorType, DynamicImage, GenericImageView, ImageFormat};
 use napi::bindgen_prelude::Uint8Array;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -107,6 +107,25 @@ fn encode_to_jpeg(img: DynamicImage, quality: u8) -> Result<Vec<u8>, image::Imag
   }
 
   Ok(jpeg_bytes)
+}
+
+/// Convert any supported image format (PNG, JPEG, …) to WebP.
+///
+/// This mirrors the behavior of the Transformer example on the NAPI-RS homepage:
+/// it decodes the image from memory and re-encodes it as WebP in memory.
+#[napi]
+pub fn image_to_webp(bytes: Uint8Array) -> napi::Result<Vec<u8>> {
+  let input = bytes.to_vec();
+  let img = image::load_from_memory(&input).map_err(map_image_error)?;
+
+  let mut out = Vec::new();
+  {
+    let mut cursor = Cursor::new(&mut out);
+    img.write_to(&mut cursor, ImageFormat::WebP)
+      .map_err(map_image_error)?;
+  }
+
+  Ok(out)
 }
 
 /// Try to optimize/compress a PDF using Ghostscript (`gs`) if available.
