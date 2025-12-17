@@ -1,87 +1,180 @@
-# `@napi-rs/package-template`
+# `@malolebrin/cv-normalizer`
 
-![https://github.com/napi-rs/package-template/actions](https://github.com/napi-rs/package-template/workflows/CI/badge.svg)
+Module natif (Rust + NAPI-RS) pour **normaliser et compresser des CV côté Node.js**.
 
-> Template project for writing node packages with napi-rs.
+- **Images (`image/png`, `image/jpeg`, `image/jpg`)** → conversion en **PDF 1 page** : décodage, downscale basique, recompression JPEG, puis encapsulation dans un PDF minimal.  
+- **PDF (`application/pdf`, `application/x-pdf`)** → **validation du header `%PDF-`** puis retour des octets inchangés (hook prêt pour un futur pipeline d’optimisation PDF).  
+- **Autres mime types** → pour l’instant, **pass-through** (octets inchangés).
 
-# Usage
+Le module est pensé pour être appelé depuis un backend Node/Strapi au moment de la réception des CV.
 
-1. Click **Use this template**.
-2. **Clone** your project.
-3. Run `yarn install` to install dependencies.
-4. Run `yarn napi rename -n [@your-scope/package-name] -b [binary-name]` command under the project folder to rename your package.
+---
 
-## Install this test package
+## Installation
 
-```bash
-yarn add @napi-rs/package-template
-```
-
-## Ability
-
-### Build
-
-After `yarn build/npm run build` command, you can see `package-template.[darwin|win32|linux].node` file in project root. This is the native addon built from [lib.rs](./src/lib.rs).
-
-### Test
-
-With [ava](https://github.com/avajs/ava), run `yarn test/npm run test` to testing native addon. You can also switch to another testing framework if you want.
-
-### CI
-
-With GitHub Actions, each commit and pull request will be built and tested automatically in [`node@20`, `@node22`] x [`macOS`, `Linux`, `Windows`] matrix. You will never be afraid of the native addon broken in these platforms.
-
-### Release
-
-Release native package is very difficult in old days. Native packages may ask developers who use it to install `build toolchain` like `gcc/llvm`, `node-gyp` or something more.
-
-With `GitHub actions`, we can easily prebuild a `binary` for major platforms. And with `N-API`, we should never be afraid of **ABI Compatible**.
-
-The other problem is how to deliver prebuild `binary` to users. Downloading it in `postinstall` script is a common way that most packages do it right now. The problem with this solution is it introduced many other packages to download binary that has not been used by `runtime codes`. The other problem is some users may not easily download the binary from `GitHub/CDN` if they are behind a private network (But in most cases, they have a private NPM mirror).
-
-In this package, we choose a better way to solve this problem. We release different `npm packages` for different platforms. And add it to `optionalDependencies` before releasing the `Major` package to npm.
-
-`NPM` will choose which native package should download from `registry` automatically. You can see [npm](./npm) dir for details. And you can also run `yarn add @napi-rs/package-template` to see how it works.
-
-## Develop requirements
-
-- Install the latest `Rust`
-- Install `Node.js@10+` which fully supported `Node-API`
-- Install `yarn@1.x`
-
-## Test in local
-
-- yarn
-- yarn build
-- yarn test
-
-And you will see:
+Une fois publié sur npm :
 
 ```bash
-$ ava --verbose
-
-  ✔ sync function from native code
-  ✔ sleep function from native code (201ms)
-  ─
-
-  2 tests passed
-✨  Done in 1.12s.
+pnpm add @malolebrin/cv-normalizer
 ```
 
-## Release package
-
-Ensure you have set your **NPM_TOKEN** in the `GitHub` project setting.
-
-In `Settings -> Secrets`, add **NPM_TOKEN** into it.
-
-When you want to release the package:
+En local dans ce repo :
 
 ```bash
-npm version [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease [--preid=<prerelease-id>] | from-git]
-
-git push
+pnpm install
+pnpm build
 ```
 
-GitHub actions will do the rest job for you.
+Le build génère le binaire natif `cv-normalizer.*.node` et le fichier de binding `index.js`.
 
-> WARN: Don't run `npm publish` manually.
+---
+
+## API Node / TypeScript
+
+Signature générée (`index.d.ts`) :
+
+```ts
+export declare function normalizeCvToPdf(
+  bytes: Uint8Array,
+  mime: string,
+): number[]
+```
+
+Usage typique côté Node :
+
+```ts
+import { normalizeCvToPdf } from '@malolebrin/cv-normalizer'
+
+// buffer: Buffer ou Uint8Array contenant le CV
+// mime: string ('image/png', 'image/jpeg', 'application/pdf', etc.)
+const out = normalizeCvToPdf(buffer, mime)
+
+// Le binding renvoie un Array<number>, on le remet en Buffer pour Node
+const pdfBuffer = Buffer.from(out)
+```
+
+### Comportement détaillé
+
+- **Images (`image/png`, `image/jpeg`, `image/jpg`, `image/pjpeg`)**  
+  - Décodage via la crate Rust `image`.  
+  - Downscale si nécessaire pour que le plus grand côté ≤ 2000 px.  
+  - Ré-encodage en JPEG (qualité ≈ 80).  
+  - Génération d’un **PDF 1 page** qui dessine l’image sur toute la page.
+
+- **PDF (`application/pdf`, `application/x-pdf`)**  
+  - Vérifie que les octets commencent par `"%PDF-"`.  
+  - Si ce n’est pas le cas → lève une erreur NAPI (`code: InvalidArg`).  
+  - Sinon → retourne les octets **tels quels** (future extension : recompression/optimisation PDF).
+
+- **Autres mime types**  
+  - Les octets sont simplement renvoyés inchangés.
+
+---
+
+## Script de démo en ligne de commande
+
+Pour tester la normalisation sur de **vrais fichiers** (images ou PDF), un script simple est fourni :
+
+```bash
+pnpm build
+pnpm demo /chemin/vers/mon_cv.png
+pnpm demo /chemin/vers/mon_cv.pdf
+```
+
+Ce script (`scripts/normalize-file.cjs`) :
+
+- détecte ou utilise le `mimeType` passé en argument,  
+- appelle `normalizeCvToPdf`,  
+- écrit un fichier de sortie `mon_cv.normalized.pdf` à côté du fichier d’entrée,  
+- affiche la taille avant/après et le pourcentage de gain (ou de croissance) de taille.
+
+Usage détaillé :
+
+```bash
+node scripts/normalize-file.cjs <inputPath> [mimeType] [outputPath]
+```
+
+Exemples :
+
+```bash
+# Image PNG → PDF
+node scripts/normalize-file.cjs ./fixtures/cv.png
+
+# Image JPEG avec mime explicite
+node scripts/normalize-file.cjs ./fixtures/cv.jpg image/jpeg
+
+# PDF existant (validation + pass-through)
+node scripts/normalize-file.cjs ./fixtures/cv.pdf
+```
+
+---
+
+## Développement
+
+### Prérequis
+
+- **Rust** récent (édition 2021).  
+- **Node.js** ≥ 18 (la CI tourne aujourd’hui sur Node 20/22/24).  
+- **pnpm** (gestionnaire de paquets utilisé dans ce repo).
+
+### Commandes principales
+
+```bash
+# Installer les dépendances JS
+pnpm install
+
+# Build du module natif (toutes cibles activées dans package.json)
+pnpm build
+
+# Lancer les tests (AVA)
+pnpm test
+
+# Lint JS/TS
+pnpm lint
+
+# Formatage Rust / JS / TOML
+pnpm format
+```
+
+Les tests actuels vérifient notamment :
+
+- le comportement **no-op** sur un petit PDF valide,  
+- la remontée d’erreur NAPI (`InvalidArg`) sur une image PNG volontairement invalide (couverture du chemin d’erreur image).
+
+---
+
+## Intégration typique (Strapi / backend Node)
+
+Dans un backend Node/Strapi, le pattern recommandé est :
+
+```ts
+import { normalizeCvToPdf } from '@malolebrin/cv-normalizer'
+
+async function normalizeIncomingCv(file: { buffer: Buffer; mime: string }) {
+  const out = normalizeCvToPdf(file.buffer, file.mime)
+  const pdfBuffer = Buffer.from(out)
+
+  return {
+    ...file,
+    buffer: pdfBuffer,
+    size: pdfBuffer.length,
+    mime: 'application/pdf',
+  }
+}
+```
+
+Ce helper peut être appelé dans un **controller** ou un **lifecycle** Strapi juste avant la persistance du CV pour que tous les CV stockés soient déjà **en PDF normalisé**.
+
+---
+
+## CI & Release
+
+- **CI GitHub Actions**  
+  - Build, lint et tests sont exécutés sur une matrice Node.js / OS (Linux, macOS, Windows) en utilisant **pnpm** pour les dépendances JS et `cargo` pour la partie Rust.  
+  - Les artefacts `.node` / `.wasm` sont prébuildés pour plusieurs plateformes via `@napi-rs/cli`.
+
+- **Publication npm**  
+  - La publication est gérée via la CI à partir des tags git (`npm version` + `git push`).  
+  - Assure-toi d’avoir configuré `NPM_TOKEN` dans les secrets GitHub du repo.  
+  - Ne pas lancer `npm publish` manuellement : la pipeline GitHub Actions se charge de publier les packages précompilés.
+

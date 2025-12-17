@@ -51,6 +51,7 @@
     "lint": "oxlint .",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "ava",
+    "demo": "node scripts/normalize-file.cjs",
     "preversion": "napi build --platform && git add .",
     "version": "napi version",
     "prepare": "husky"
