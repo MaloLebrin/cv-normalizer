@@ -15,18 +15,28 @@ use napi_derive::napi;
 /// - If the mime type is a supported image (`image/png`, `image/jpeg`, `image/jpg`),
 ///   the image is decoded, optionally downscaled, recompressed as JPEG,
 ///   and wrapped into a single-page PDF.
+/// - If the mime type is `application/pdf`, the input is currently validated
+///   (must start with `%PDF-`) then returned unchanged. This is the hook where
+///   a real PDF optimization pipeline can be implemented later.
 /// - For any other mime type, the input bytes are returned unchanged.
 #[napi]
 pub fn normalize_cv_to_pdf(bytes: Uint8Array, mime: String) -> napi::Result<Vec<u8>> {
   let mime_lc = mime.to_ascii_lowercase();
   let input = bytes.to_vec();
 
-  // Only handle images for now. Everything else is returned as-is.
-  if !(mime_lc == "image/png"
-    || mime_lc == "image/jpeg"
-    || mime_lc == "image/jpg"
-    || mime_lc == "image/pjpeg")
-  {
+  // PDF: validate header, keep bytes as-is for now.
+  if is_pdf_mime(&mime_lc) {
+    if !input.starts_with(b"%PDF-") {
+      return Err(Error::new(
+        Status::InvalidArg,
+        "Input declared as application/pdf but does not start with %PDF- header",
+      ));
+    }
+    return Ok(input);
+  }
+
+  // Images: normalize to single-page PDF.
+  if !is_supported_image_mime(&mime_lc) {
     return Ok(input);
   }
 
@@ -47,6 +57,14 @@ pub fn normalize_cv_to_pdf(bytes: Uint8Array, mime: String) -> napi::Result<Vec<
   let pdf_bytes = jpeg_to_single_page_pdf(&jpeg_bytes, target_w, target_h);
 
   Ok(pdf_bytes)
+}
+
+fn is_pdf_mime(mime: &str) -> bool {
+  mime == "application/pdf" || mime == "application/x-pdf"
+}
+
+fn is_supported_image_mime(mime: &str) -> bool {
+  mime == "image/png" || mime == "image/jpeg" || mime == "image/jpg" || mime == "image/pjpeg"
 }
 
 fn map_image_error(err: image::ImageError) -> Error {

@@ -2,8 +2,8 @@ import test from 'ava'
 
 import { normalizeCvToPdf } from '../index'
 
-test('normalizeCvToPdf echoes back bytes (v1 no-op)', (t) => {
-  const input = new Uint8Array([1, 2, 3, 4])
+test('normalizeCvToPdf echoes back bytes for valid PDF (no-op for now)', (t) => {
+  const input = new Uint8Array(Buffer.from('%PDF-1.4\nHello\n', 'ascii'))
 
   const output = normalizeCvToPdf(input, 'application/pdf') as Array<number>
 

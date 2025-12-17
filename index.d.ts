@@ -7,6 +7,9 @@
  * - If the mime type is a supported image (`image/png`, `image/jpeg`, `image/jpg`),
  *   the image is decoded, optionally downscaled, recompressed as JPEG,
  *   and wrapped into a single-page PDF.
+ * - If the mime type is `application/pdf`, the input is currently validated
+ *   (must start with `%PDF-`) then returned unchanged. This is the hook where
+ *   a real PDF optimization pipeline can be implemented later.
  * - For any other mime type, the input bytes are returned unchanged.
  */
 export declare function normalizeCvToPdf(bytes: Uint8Array, mime: string): Array<number>
