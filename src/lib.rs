@@ -121,7 +121,8 @@ pub fn image_to_webp(bytes: Uint8Array) -> napi::Result<Vec<u8>> {
   let mut out = Vec::new();
   {
     let mut cursor = Cursor::new(&mut out);
-    img.write_to(&mut cursor, ImageFormat::WebP)
+    img
+      .write_to(&mut cursor, ImageFormat::WebP)
       .map_err(map_image_error)?;
   }
 
