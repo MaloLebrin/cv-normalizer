@@ -1,7 +1,7 @@
 {
   "name": "@malolebrin/cv-normalizer",
   "version": "1.0.0",
-  "description": "Template project for writing node package with napi-rs",
+  "description": "Native module (Rust + NAPI-RS) to normalize and compress files on the Node.js side.",
   "main": "index.js",
   "repository": {
     "type": "git",
