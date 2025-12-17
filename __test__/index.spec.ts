@@ -1,8 +1,13 @@
 import test from 'ava'
 
-import { plus100 } from '../index'
+import { normalizeCvToPdf } from '../index'
 
-test('sync function from native code', (t) => {
-  const fixture = 42
-  t.is(plus100(fixture), fixture + 100)
+test('normalizeCvToPdf echoes back bytes (v1 no-op)', (t) => {
+  const input = new Uint8Array([1, 2, 3, 4])
+
+  const output = normalizeCvToPdf(input, 'application/pdf')
+
+  t.true(output instanceof Uint8Array)
+  t.is(output.length, input.length)
+  t.deepEqual(Array.from(output), Array.from(input))
 })
