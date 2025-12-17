@@ -26,19 +26,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: yarn
+          cache: pnpm
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: Oxlint
-        run: yarn lint
+        run: pnpm lint
       - name: Cargo fmt
         run: cargo fmt -- --check
       - name: Clippy
@@ -50,28 +54,32 @@ jobs:
         settings:
           - host: macos-latest
             target: x86_64-apple-darwin
-            build: yarn build --target x86_64-apple-darwin
+            build: pnpm build --target x86_64-apple-darwin
           - host: windows-latest
-            build: yarn build --target x86_64-pc-windows-msvc
+            build: pnpm build --target x86_64-pc-windows-msvc
             target: x86_64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build: yarn build --target x86_64-unknown-linux-gnu --use-napi-cross
+            build: pnpm build --target x86_64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            build: yarn build --target x86_64-unknown-linux-musl -x
+            build: pnpm build --target x86_64-unknown-linux-musl -x
           - host: macos-latest
             target: aarch64-apple-darwin
-            build: yarn build --target aarch64-apple-darwin
+            build: pnpm build --target aarch64-apple-darwin
     name: stable - ${{ matrix.settings.target }} - node@22
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: yarn
+          cache: pnpm
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -104,7 +112,7 @@ jobs:
         if: ${{ matrix.settings.setup }}
         shell: bash
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: Build
         run: ${{ matrix.settings.build }}
         shell: bash
@@ -139,14 +147,18 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-          cache: yarn
+          cache: pnpm
           architecture: ${{ matrix.settings.architecture }}
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
@@ -156,7 +168,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: yarn test
+        run: pnpm test
   test-linux-binding:
     name: Test ${{ matrix.target }} - node@${{ matrix.node }}
     needs:
@@ -173,11 +185,15 @@ jobs:
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-          cache: yarn
+          cache: pnpm
       - name: Output docker params
         id: docker
         run: |
@@ -198,10 +214,7 @@ jobs:
             }
           " >> $GITHUB_OUTPUT
       - name: Install dependencies
-        run: |
-          yarn config set --json supportedArchitectures.cpu '["current", "arm64", "x64", "arm"]'
-          yarn config set --json supportedArchitectures.libc '["current", "musl", "gnu"]'
-          yarn install
+        run: pnpm install
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
@@ -222,7 +235,10 @@ jobs:
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
-          run: yarn test
+          run: |
+            npm install -g pnpm@9
+            pnpm install
+            pnpm test
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -235,21 +251,25 @@ jobs:
       - test-linux-binding
     steps:
       - uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: yarn
+          cache: pnpm
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: create npm dirs
-        run: yarn napi create-npm-dirs
+        run: pnpm exec napi create-npm-dirs
       - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
           path: artifacts
       - name: Move artifacts
-        run: yarn artifacts
+        run: pnpm artifacts
       - name: List packages
         run: ls -R ./npm
         shell: bash
