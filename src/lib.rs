@@ -118,7 +118,7 @@ fn jpeg_to_single_page_pdf(jpeg_bytes: &[u8], width: u32, height: u32) -> Vec<u8
   // Helper to start an object and record its offset for the xref table.
   let start_obj = |pdf: &mut Vec<u8>, xref: &mut Vec<usize>, id: u32| {
     xref.push(pdf.len());
-    let _ = write!(pdf, "{} 0 obj\n", id);
+    let _ = writeln!(pdf, "{} 0 obj", id);
   };
 
   pdf.extend_from_slice(b"%PDF-1.4\n");
@@ -170,7 +170,7 @@ fn jpeg_to_single_page_pdf(jpeg_bytes: &[u8], width: u32, height: u32) -> Vec<u8
   let _ = write!(
     pdf,
     "<< /Length {} >>\nstream\n{}endstream\nendobj\n",
-    content.as_bytes().len(),
+    content.len(),
     content
   );
 
@@ -178,19 +178,21 @@ fn jpeg_to_single_page_pdf(jpeg_bytes: &[u8], width: u32, height: u32) -> Vec<u8
   let xref_start = pdf.len();
   let total_objects = xref_positions.len() as u32;
 
-  let _ = write!(pdf, "xref\n0 {}\n", total_objects + 1);
+  let _ = writeln!(pdf, "xref");
+  let _ = writeln!(pdf, "0 {}", total_objects + 1);
   pdf.extend_from_slice(b"0000000000 65535 f \n");
 
   for offset in &xref_positions {
-    let _ = write!(pdf, "{:010} 00000 n \n", offset);
+    let _ = writeln!(pdf, "{:010} 00000 n ", offset);
   }
 
   let _ = write!(
     pdf,
-    "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n",
+    "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{}",
     total_objects + 1,
     xref_start
   );
+  let _ = writeln!(pdf, "\n%%EOF");
 
   pdf
 }
