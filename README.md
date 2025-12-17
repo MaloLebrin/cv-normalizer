@@ -12,20 +12,13 @@ The module is designed to be called from a Node/Strapi backend when receiving CV
 
 ## Installation
 
-Once published on npm:
+Install from npm:
 
 ```bash
 pnpm add @malolebrin/cv-normalizer
+# or
+npm install @malolebrin/cv-normalizer
 ```
-
-For local development in this repo:
-
-```bash
-pnpm install
-pnpm build
-```
-
-The build generates the native binary `cv-normalizer.*.node` and the JS binding file `index.js`.
 
 ---
 
