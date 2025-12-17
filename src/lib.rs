@@ -164,10 +164,7 @@ fn jpeg_to_single_page_pdf(jpeg_bytes: &[u8], width: u32, height: u32) -> Vec<u8
   start_obj(&mut pdf, &mut xref_positions, 5);
   let mut content = String::new();
   let _ = FmtWrite::write_str(&mut content, "q\n");
-  let _ = FmtWrite::write_str(
-    &mut content,
-    &format!("{} 0 0 {} 0 0 cm\n", width, height),
-  );
+  let _ = FmtWrite::write_str(&mut content, &format!("{} 0 0 {} 0 0 cm\n", width, height));
   let _ = FmtWrite::write_str(&mut content, "/Im0 Do\nQ\n");
 
   let _ = write!(
