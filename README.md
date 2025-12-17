@@ -4,8 +4,7 @@ Native module (Rust + NAPI-RS) to **normalize and compress CV files on the Node.
 
 - **Images (`image/png`, `image/jpeg`, `image/jpg`, `image/pjpeg`)** → converted to a **single-page PDF**: decode, basic downscale, JPEG recompression, and embedding into a minimal PDF.  
 - **PDF (`application/pdf`, `application/x-pdf`)** → **header validation (`%PDF-`)** and then **optional compression** using Ghostscript if available; falls back to the original bytes when optimization fails or is not beneficial.  
-- **Other mime types** → currently **pass-through** (bytes returned unchanged).  
-- **Standalone image transformation** → `imageToWebp` converts any supported image (PNG, JPEG, …) to **WebP** in memory (similar to the example on the [NAPI-RS homepage](https://napi.rs/)).
+- **Other mime types** → currently **pass-through** (bytes returned unchanged).
 
 The module is designed to be called from a Node/Strapi backend when receiving CV files.
 
@@ -32,31 +31,24 @@ The build generates the native binary `cv-normalizer.*.node` and the JS binding 
 
 ## Node / TypeScript API
 
-Generated signatures (`index.d.ts`):
+Generated signature (`index.d.ts`):
 
 ```ts
 export declare function normalizeCvToPdf(
   bytes: Uint8Array,
   mime: string,
 ): number[]
-
-export declare function imageToWebp(
-  bytes: Uint8Array,
-): number[]
 ```
 
 Typical usage from Node:
 
 ```ts
-import { normalizeCvToPdf, imageToWebp } from '@malolebrin/cv-normalizer'
+import { normalizeCvToPdf } from '@malolebrin/cv-normalizer'
 
 // buffer: Buffer or Uint8Array containing the CV/image
 // mime: string ('image/png', 'image/jpeg', 'application/pdf', etc.)
 const pdfArray = normalizeCvToPdf(buffer, mime)
 const pdfBuffer = Buffer.from(pdfArray)
-
-const webpArray = imageToWebp(buffer)
-const webpBuffer = Buffer.from(webpArray)
 ```
 
 ### `normalizeCvToPdf` behavior
@@ -78,27 +70,6 @@ const webpBuffer = Buffer.from(webpArray)
   - Bytes are returned unchanged (no transformation).
 
 > **Note:** To benefit from PDF compression in production, the `gs` (Ghostscript) binary must be installed and available in the runtime environment.
-
-### `imageToWebp` behavior
-
-- Accepts any image format supported by the `image` crate (PNG, JPEG, …).  
-- Decodes the image from memory and re-encodes it as **WebP** using `ImageFormat::WebP`.  
-- Returns a `number[]` that can be turned into a Node `Buffer`.
-
-Example:
-
-```ts
-import { imageToWebp } from '@malolebrin/cv-normalizer'
-import { readFileSync, writeFileSync } from 'node:fs'
-
-const png = readFileSync('my-image.png')
-const webpArray = imageToWebp(png)
-const webpBuffer = Buffer.from(webpArray)
-
-writeFileSync('my-image.webp', webpBuffer)
-```
-
----
 
 ## CLI demo script
 
@@ -168,8 +139,7 @@ pnpm format
 The current tests cover, among other things:
 
 - behavior on a small valid PDF input (remains a valid PDF, not larger than the original),  
-- error mapping (`InvalidArg`) when decoding an intentionally invalid PNG (image error path),  
-- `imageToWebp` converting a real PNG fixture into a valid WebP file (checking `RIFF` and `WEBP` tags).
+- error mapping (`InvalidArg`) when decoding an intentionally invalid PNG (image error path).
 
 ---
 
@@ -192,22 +162,3 @@ async function normalizeIncomingCv(file: { buffer: Buffer; mime: string }) {
   }
 }
 ```
-
-This helper can be called from a **controller** or **lifecycle hook** right before persisting the CV so that all stored CVs are already **normalized to PDF**.
-
-If you also want to keep a **WebP thumbnail** version of the CV, you can additionally call `imageToWebp` on the original image buffer and store the result alongside the PDF.
-
----
-
-## CI & Release
-
-- **GitHub Actions CI**  
-  - Build, lint and tests are run on a Node.js / OS matrix (Linux, macOS, Windows) using **pnpm** for JS dependencies and `cargo` for the Rust side.  
-  - `.node` / `.wasm` artifacts are prebuilt for multiple platforms via `@napi-rs/cli`.
-
-- **npm publishing**  
-  - Publishing is handled by CI from git tags (`npm version` + `git push`).  
-  - Make sure `NPM_TOKEN` is configured in the repo’s GitHub secrets.  
-  - Do **not** run `npm publish` manually: the GitHub Actions pipeline is responsible for publishing precompiled packages.
-
-
