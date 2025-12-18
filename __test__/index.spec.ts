@@ -96,7 +96,7 @@ test('base64ToBuffer throws on invalid base64', (t) => {
 
 test('extractTextFromPdf extracts text from a valid PDF', (t) => {
   // Create a minimal PDF with text
-  const pdfPath = path.join(__dirname, 'fixtures', 'Funbooker Gift.pdf')
+  const pdfPath = path.join(__dirname, 'pdf-sample_0.pdf')
   const pdfBuffer = readFileSync(pdfPath)
 
   const text = extractTextFromPdf(pdfBuffer) as string
