@@ -64,12 +64,28 @@ const pdfBuffer = Buffer.from(pdfArray)
 
 > **Note:** To benefit from PDF compression in production, the `gs` (Ghostscript) binary must be installed and available in the runtime environment.
 
-### Special cases
+### Supported and unsupported formats
 
-- **SVG (`image/svg+xml`)**  
-  - **`normalizeCvToPdf`**: SVG is not a supported image format, so it falls under "Other mime types" → bytes are returned unchanged (pass-through).  
-  - **`imageToWebp`**: SVG is not supported by the Rust `image` crate (which only handles raster formats). Calling `imageToWebp` with SVG bytes will throw a NAPI error with `code: InvalidArg` and a message like "Failed to process image for CV normalization: Unsupported image format".  
-  - To support SVG conversion, you would need to first convert the SVG to a raster format (PNG/JPEG) using a separate library, then pass the result to these functions.
+**Supported formats:**
+
+- **`normalizeCvToPdf`**:  
+  - Images: `image/png`, `image/jpeg`, `image/jpg`, `image/pjpeg` → converted to single-page PDF  
+  - PDF: `application/pdf`, `application/x-pdf` → validated and optionally compressed
+
+- **`imageToWebp`**:  
+  - Images: PNG, JPEG, WebP (any format decodable by the Rust `image` crate with features `jpeg`, `png`, `webp`)
+
+**Unsupported formats (pass-through for `normalizeCvToPdf`, error for `imageToWebp`):**
+
+- **Raster images**: `image/gif`, `image/bmp`, `image/tiff`, `image/webp`, `image/x-icon` (ICO), `image/avif`, `image/heic`, `image/heif`  
+- **Vector images**: `image/svg+xml`  
+- **Documents**: `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX), `application/msword` (DOC), `application/vnd.oasis.opendocument.text` (ODT), `application/rtf`  
+- **Other**: Any other mime type not listed above
+
+**Behavior:**
+
+- **`normalizeCvToPdf`** with unsupported formats → bytes are returned unchanged (pass-through)  
+- **`imageToWebp`** with unsupported formats → throws a NAPI error with `code: InvalidArg` and a message like "Failed to process image for CV normalization: Unsupported image format"
 
 ## CLI demo script
 
