@@ -105,7 +105,12 @@ pub fn optimize_image(
           .write_to(&mut cursor, ImageFormat::WebP)
           .map_err(map_image_error)?;
       }
-      "auto" | _ => {
+      "auto" => {
+        resized
+          .write_to(&mut cursor, ImageFormat::Png)
+          .map_err(map_image_error)?;
+      }
+      _ => {
         resized
           .write_to(&mut cursor, ImageFormat::Png)
           .map_err(map_image_error)?;

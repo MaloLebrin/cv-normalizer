@@ -6,7 +6,7 @@ use napi_derive::napi;
 /// Convert a buffer to Base64 string.
 #[napi]
 pub fn buffer_to_base64(buffer: Uint8Array) -> String {
-  general_purpose::STANDARD.encode(&buffer.to_vec())
+  general_purpose::STANDARD.encode(&buffer)
 }
 
 /// Convert a Base64 string to a buffer.

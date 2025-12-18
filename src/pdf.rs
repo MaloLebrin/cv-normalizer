@@ -4,7 +4,6 @@ use std::process::Command;
 use napi::bindgen_prelude::Uint8Array;
 use napi::{Error, Status};
 use napi_derive::napi;
-use pdf_extract;
 use tempfile::NamedTempFile;
 
 /// Extract text content from a PDF document.
