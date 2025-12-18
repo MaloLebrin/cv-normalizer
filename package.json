@@ -1,6 +1,6 @@
 {
   "name": "@malolebrin/cv-normalizer",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Native module (Rust + NAPI-RS) to normalize and compress files on the Node.js side.",
   "main": "index.js",
   "repository": {
