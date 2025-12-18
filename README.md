@@ -64,6 +64,13 @@ const pdfBuffer = Buffer.from(pdfArray)
 
 > **Note:** To benefit from PDF compression in production, the `gs` (Ghostscript) binary must be installed and available in the runtime environment.
 
+### Special cases
+
+- **SVG (`image/svg+xml`)**  
+  - **`normalizeCvToPdf`**: SVG is not a supported image format, so it falls under "Other mime types" → bytes are returned unchanged (pass-through).  
+  - **`imageToWebp`**: SVG is not supported by the Rust `image` crate (which only handles raster formats). Calling `imageToWebp` with SVG bytes will throw a NAPI error with `code: InvalidArg` and a message like "Failed to process image for CV normalization: Unsupported image format".  
+  - To support SVG conversion, you would need to first convert the SVG to a raster format (PNG/JPEG) using a separate library, then pass the result to these functions.
+
 ## CLI demo script
 
 To try normalization on **real files** (images or PDFs), a small CLI script is provided:
