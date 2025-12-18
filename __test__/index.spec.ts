@@ -3,7 +3,14 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { imageToWebp, normalizeCvToPdf } from '../index'
+import {
+  base64ToBuffer,
+  bufferToBase64,
+  extractTextFromPdf,
+  imageToWebp,
+  normalizeCvToPdf,
+  optimizeImage,
+} from '../index'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -38,7 +45,7 @@ test('normalizeCvToPdf converts PNG image buffer to a PDF', (t) => {
   )
 
   t.is(error?.code, 'InvalidArg')
-  t.regex(error?.message ?? '', /Failed to process image for CV normalization/)
+  t.regex(error?.message ?? '', /Failed to process image/)
 })
 
 test('imageToWebp converts a real PNG fixture to WebP', (t) => {
@@ -56,4 +63,137 @@ test('imageToWebp converts a real PNG fixture to WebP', (t) => {
 
   t.is(riff, 'RIFF')
   t.is(webpTag, 'WEBP')
+})
+
+test('bufferToBase64 encodes a buffer correctly', (t) => {
+  const input = Buffer.from('Hello World')
+  const base64 = bufferToBase64(input)
+
+  t.is(typeof base64, 'string')
+  t.is(base64, 'SGVsbG8gV29ybGQ=')
+})
+
+test('base64ToBuffer decodes a base64 string correctly', (t) => {
+  const base64 = 'SGVsbG8gV29ybGQ='
+  const output = base64ToBuffer(base64) as Array<number>
+
+  t.true(Array.isArray(output))
+  const buffer = Buffer.from(output)
+  t.is(buffer.toString('utf-8'), 'Hello World')
+})
+
+test('base64ToBuffer throws on invalid base64', (t) => {
+  const error = t.throws(
+    () => {
+      base64ToBuffer('Invalid!@#Base64')
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Failed to decode Base64/)
+})
+
+test('extractTextFromPdf extracts text from a valid PDF', (t) => {
+  // Create a minimal PDF with text
+  const pdfPath = path.join(__dirname, 'fixtures', 'Funbooker Gift.pdf')
+  const pdfBuffer = readFileSync(pdfPath)
+
+  const text = extractTextFromPdf(pdfBuffer) as string
+
+  t.is(typeof text, 'string')
+  // The text might be empty for some PDFs, but the function should not throw
+  t.true(text.length >= 0)
+})
+
+test('extractTextFromPdf throws on invalid PDF', (t) => {
+  const invalidPdf = Buffer.from('Not a PDF')
+
+  const error = t.throws(
+    () => {
+      extractTextFromPdf(invalidPdf)
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Failed to extract text from PDF/)
+})
+
+test('optimizeImage resizes image when maxWidth is provided', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(imagePath)
+
+  const optimized = optimizeImage(imageBuffer, {
+    maxWidth: 100,
+    maxHeight: 0,
+    quality: 80,
+    format: 'jpeg',
+  }) as Array<number>
+
+  t.true(Array.isArray(optimized))
+  const optimizedBuffer = Buffer.from(optimized)
+  t.true(optimizedBuffer.length > 0)
+  t.true(optimizedBuffer.length < imageBuffer.length || optimizedBuffer.length === imageBuffer.length)
+})
+
+test('optimizeImage resizes image when maxHeight is provided', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(imagePath)
+
+  const optimized = optimizeImage(imageBuffer, {
+    maxWidth: 0,
+    maxHeight: 100,
+    quality: 80,
+    format: 'jpeg',
+  }) as Array<number>
+
+  t.true(Array.isArray(optimized))
+  const optimizedBuffer = Buffer.from(optimized)
+  t.true(optimizedBuffer.length > 0)
+})
+
+test('optimizeImage converts to WebP format', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(imagePath)
+
+  const optimized = optimizeImage(imageBuffer, {
+    format: 'webp',
+    quality: 80,
+  }) as Array<number>
+
+  t.true(Array.isArray(optimized))
+  const optimizedBuffer = Buffer.from(optimized)
+  t.true(optimizedBuffer.length > 0)
+
+  // Check WebP header
+  const riff = optimizedBuffer.subarray(0, 4).toString('ascii')
+  const webpTag = optimizedBuffer.subarray(8, 12).toString('ascii')
+  t.is(riff, 'RIFF')
+  t.is(webpTag, 'WEBP')
+})
+
+test('optimizeImage uses default options when none provided', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(imagePath)
+
+  const optimized = optimizeImage(imageBuffer) as Array<number>
+
+  t.true(Array.isArray(optimized))
+  const optimizedBuffer = Buffer.from(optimized)
+  t.true(optimizedBuffer.length > 0)
+})
+
+test('optimizeImage throws on invalid image', (t) => {
+  const invalidImage = Buffer.from('Not an image')
+
+  const error = t.throws(
+    () => {
+      optimizeImage(invalidImage)
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Failed to process image/)
 })

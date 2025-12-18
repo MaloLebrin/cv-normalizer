@@ -1,0 +1,150 @@
+use std::fmt::Write as FmtWrite;
+use std::io::Write as IoWrite;
+
+use image::imageops::FilterType;
+use image::GenericImageView;
+use napi::bindgen_prelude::Uint8Array;
+use napi::{Error, Status};
+use napi_derive::napi;
+
+use crate::image::encode_to_jpeg;
+use crate::pdf::try_optimize_pdf_with_ghostscript;
+use crate::utils::{calculate_target_size, is_pdf_mime, is_supported_image_mime, map_image_error};
+
+/// Normalize a CV file to PDF and optionally compress it.
+///
+/// V1 behavior:
+/// - If the mime type is a supported image (`image/png`, `image/jpeg`, `image/jpg`),
+///   the image is decoded, optionally downscaled, recompressed as JPEG,
+///   and wrapped into a single-page PDF.
+/// - If the mime type is `application/pdf`, the input is currently validated
+///   (must start with `%PDF-`) then returned unchanged. This is the hook where
+///   a real PDF optimization pipeline can be implemented later.
+/// - For any other mime type, the input bytes are returned unchanged.
+#[napi]
+pub fn normalize_cv_to_pdf(bytes: Uint8Array, mime: String) -> napi::Result<Vec<u8>> {
+  let mime_lc = mime.to_ascii_lowercase();
+  let input = bytes.to_vec();
+
+  // PDF: validate header, then try to optimize; fall back to original on any failure.
+  if is_pdf_mime(&mime_lc) {
+    if !input.starts_with(b"%PDF-") {
+      return Err(Error::new(
+        Status::InvalidArg,
+        "Input declared as application/pdf but does not start with %PDF- header",
+      ));
+    }
+    if let Some(optimized) = try_optimize_pdf_with_ghostscript(&input) {
+      return Ok(optimized);
+    }
+    return Ok(input);
+  }
+
+  // Images: normalize to single-page PDF.
+  if !is_supported_image_mime(&mime_lc) {
+    return Ok(input);
+  }
+
+  let img = image::load_from_memory(&input).map_err(map_image_error)?;
+
+  // Basic downscaling to avoid huge PDFs: keep longest side <= 2000px
+  let max_side: u32 = 2000;
+  let (orig_w, orig_h) = img.dimensions();
+  let (target_w, target_h) = calculate_target_size(orig_w, orig_h, max_side);
+
+  let resized = if (orig_w, orig_h) == (target_w, target_h) {
+    img
+  } else {
+    img.resize_exact(target_w, target_h, FilterType::Lanczos3)
+  };
+
+  let jpeg_bytes = encode_to_jpeg(resized, 80).map_err(map_image_error)?;
+  let pdf_bytes = jpeg_to_single_page_pdf(&jpeg_bytes, target_w, target_h);
+
+  Ok(pdf_bytes)
+}
+
+/// Build a minimal single-page PDF embedding the given JPEG bytes.
+///
+/// We embed the JPEG as an image XObject with /Filter /DCTDecode and draw it
+/// to fill the page. Dimensions are in "points" but we simply reuse the
+/// pixel dimensions, which is acceptable for CV images.
+fn jpeg_to_single_page_pdf(jpeg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
+  let mut pdf = Vec::new();
+  let mut xref_positions: Vec<usize> = Vec::new();
+
+  // Helper to start an object and record its offset for the xref table.
+  let start_obj = |pdf: &mut Vec<u8>, xref: &mut Vec<usize>, id: u32| {
+    xref.push(pdf.len());
+    let _ = IoWrite::write_fmt(pdf, format_args!("{} 0 obj\n", id));
+  };
+
+  pdf.extend_from_slice(b"%PDF-1.4\n");
+
+  // 1: Catalog
+  start_obj(&mut pdf, &mut xref_positions, 1);
+  pdf.extend_from_slice(b"<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+  // 2: Pages
+  start_obj(&mut pdf, &mut xref_positions, 2);
+  pdf.extend_from_slice(b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+  // 3: Page
+  start_obj(&mut pdf, &mut xref_positions, 3);
+  let _ = IoWrite::write_fmt(
+    &mut pdf,
+    format_args!(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /XObject << /Im0 4 0 R >> /ProcSet [/PDF /ImageC] >> /Contents 5 0 R >>\nendobj\n",
+      width, height
+    ),
+  );
+
+  // 4: Image XObject
+  start_obj(&mut pdf, &mut xref_positions, 4);
+  let _ = IoWrite::write_fmt(
+    &mut pdf,
+    format_args!(
+      "<< /Type /XObject /Subtype /Image /Name /Im0 /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {} >>\nstream\n",
+      width, height, jpeg_bytes.len()
+    ),
+  );
+  pdf.extend_from_slice(jpeg_bytes);
+  pdf.extend_from_slice(b"\nendstream\nendobj\n");
+
+  // 5: Content stream drawing the image to fill the page
+  start_obj(&mut pdf, &mut xref_positions, 5);
+  let mut content = String::new();
+  let _ = FmtWrite::write_str(&mut content, "q\n");
+  let _ = FmtWrite::write_str(&mut content, &format!("{} 0 0 {} 0 0 cm\n", width, height));
+  let _ = FmtWrite::write_str(&mut content, "/Im0 Do\nQ\n");
+
+  let _ = IoWrite::write_fmt(
+    &mut pdf,
+    format_args!("<< /Length {} >>\nstream\n{}endstream\nendobj\n", content.len(), content),
+  );
+
+  // XRef table
+  let xref_start = pdf.len();
+  let total_objects = xref_positions.len() as u32;
+
+  let _ = IoWrite::write_fmt(&mut pdf, format_args!("xref\n"));
+  let _ = IoWrite::write_fmt(&mut pdf, format_args!("0 {}\n", total_objects + 1));
+  pdf.extend_from_slice(b"0000000000 65535 f \n");
+
+  for offset in &xref_positions {
+    let _ = IoWrite::write_fmt(&mut pdf, format_args!("{:010} 00000 n \n", offset));
+  }
+
+  let _ = IoWrite::write_fmt(
+    &mut pdf,
+    format_args!(
+      "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{}",
+      total_objects + 1,
+      xref_start
+    ),
+  );
+  let _ = IoWrite::write_fmt(&mut pdf, format_args!("\n%%EOF\n"));
+
+  pdf
+}
+
