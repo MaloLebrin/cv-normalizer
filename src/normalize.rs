@@ -120,7 +120,11 @@ fn jpeg_to_single_page_pdf(jpeg_bytes: &[u8], width: u32, height: u32) -> Vec<u8
 
   let _ = IoWrite::write_fmt(
     &mut pdf,
-    format_args!("<< /Length {} >>\nstream\n{}endstream\nendobj\n", content.len(), content),
+    format_args!(
+      "<< /Length {} >>\nstream\n{}endstream\nendobj\n",
+      content.len(),
+      content
+    ),
   );
 
   // XRef table
@@ -147,4 +151,3 @@ fn jpeg_to_single_page_pdf(jpeg_bytes: &[u8], width: u32, height: u32) -> Vec<u8
 
   pdf
 }
-

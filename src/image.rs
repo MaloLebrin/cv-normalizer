@@ -129,4 +129,3 @@ pub(crate) fn encode_to_jpeg(img: DynamicImage, quality: u8) -> Result<Vec<u8>, 
 
   Ok(jpeg_bytes)
 }
-

@@ -64,4 +64,3 @@ pub(crate) fn try_optimize_pdf_with_ghostscript(input: &[u8]) -> Option<Vec<u8>>
 
   Some(optimized)
 }
-

@@ -33,4 +33,3 @@ pub fn is_pdf_mime(mime: &str) -> bool {
 pub fn is_supported_image_mime(mime: &str) -> bool {
   mime == "image/png" || mime == "image/jpeg" || mime == "image/jpg" || mime == "image/pjpeg"
 }
-
