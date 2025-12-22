@@ -60,12 +60,9 @@ pub fn image_to_webp_from_file(path: String) -> napi::Result<Vec<u8>> {
 /// **Input:** Base64 string (String) - Base64-encoded image data
 #[napi]
 pub fn image_to_webp_from_base64(base64: String) -> napi::Result<Vec<u8>> {
-  let bytes = general_purpose::STANDARD.decode(&base64).map_err(|e| {
-    Error::new(
-      Status::InvalidArg,
-      format!("Failed to decode Base64: {e}"),
-    )
-  })?;
+  let bytes = general_purpose::STANDARD
+    .decode(&base64)
+    .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to decode Base64: {e}")))?;
 
   let img = image::load_from_memory(&bytes).map_err(map_image_error)?;
 
@@ -269,12 +266,9 @@ pub fn optimize_image_from_base64(
   base64: String,
   options: Option<ImageOptimizeOptions>,
 ) -> napi::Result<Vec<u8>> {
-  let bytes = general_purpose::STANDARD.decode(&base64).map_err(|e| {
-    Error::new(
-      Status::InvalidArg,
-      format!("Failed to decode Base64: {e}"),
-    )
-  })?;
+  let bytes = general_purpose::STANDARD
+    .decode(&base64)
+    .map_err(|e| Error::new(Status::InvalidArg, format!("Failed to decode Base64: {e}")))?;
 
   let img = image::load_from_memory(&bytes).map_err(map_image_error)?;
 
