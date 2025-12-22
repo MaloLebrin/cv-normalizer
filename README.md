@@ -700,6 +700,223 @@ async function processImageFromAPI(apiResponse: { image: string }) {
 }
 ```
 
+### Working with Node.js Streams
+
+Les fonctions acceptent des `Uint8Array` (Buffer), pas directement des streams. Voici comment convertir un stream en buffer pour utiliser les fonctions :
+
+#### Méthode 1 : Utiliser `streamToBuffer` (recommandé)
+
+```typescript
+import { imageToWebp, optimizeImage } from '@malolebrin/cv-normalizer'
+import { createReadStream, createWriteStream } from 'fs'
+import { pipeline } from 'stream/promises'
+import { Readable } from 'stream'
+
+// Helper function pour convertir un stream en buffer
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  
+  return Buffer.concat(chunks)
+}
+
+// Exemple : Convertir une image depuis un stream HTTP en WebP
+async function convertStreamToWebp(inputStream: NodeJS.ReadableStream) {
+  // 1. Convertir le stream en buffer
+  const imageBuffer = await streamToBuffer(inputStream)
+  
+  // 2. Convertir en WebP
+  const webpArray = imageToWebp(imageBuffer)
+  const webpBuffer = Buffer.from(webpArray)
+  
+  // 3. Écrire le résultat (optionnel : créer un stream de sortie)
+  return webpBuffer
+}
+
+// Utilisation avec un fichier
+const fileStream = createReadStream('image.png')
+const webpBuffer = await convertStreamToWebp(fileStream)
+createWriteStream('image.webp').write(webpBuffer)
+
+// Utilisation avec un stream HTTP (Express, Fastify, etc.)
+import { Request, Response } from 'express'
+
+app.post('/convert-to-webp', async (req: Request, res: Response) => {
+  try {
+    const imageBuffer = await streamToBuffer(req)
+    const webpArray = imageToWebp(imageBuffer)
+    const webpBuffer = Buffer.from(webpArray)
+    
+    res.setHeader('Content-Type', 'image/webp')
+    res.send(webpBuffer)
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+```
+
+#### Méthode 2 : Utiliser `stream.pipeline` avec accumulation
+
+```typescript
+import { imageToWebp } from '@malolebrin/cv-normalizer'
+import { createReadStream, createWriteStream } from 'fs'
+import { pipeline } from 'stream/promises'
+import { Transform } from 'stream'
+
+// Créer un Transform stream qui accumule les chunks
+class BufferAccumulator extends Transform {
+  private chunks: Buffer[] = []
+
+  _transform(chunk: Buffer, encoding: string, callback: () => void) {
+    this.chunks.push(chunk)
+    callback()
+  }
+
+  _flush(callback: () => void) {
+    const buffer = Buffer.concat(this.chunks)
+    callback()
+  }
+
+  getBuffer(): Buffer {
+    return Buffer.concat(this.chunks)
+  }
+}
+
+// Convertir un fichier via stream
+async function convertFileStreamToWebp(inputPath: string, outputPath: string) {
+  const accumulator = new BufferAccumulator()
+  
+  await pipeline(
+    createReadStream(inputPath),
+    accumulator
+  )
+  
+  const imageBuffer = accumulator.getBuffer()
+  const webpArray = imageToWebp(imageBuffer)
+  const webpBuffer = Buffer.from(webpArray)
+  
+  await pipeline(
+    Readable.from(webpBuffer),
+    createWriteStream(outputPath)
+  )
+}
+
+convertFileStreamToWebp('input.png', 'output.webp')
+```
+
+#### Méthode 3 : Utiliser `Readable.fromWebStream` (Node.js 20+)
+
+```typescript
+import { imageToWebp } from '@malolebrin/cv-normalizer'
+import { Readable } from 'stream'
+
+// Pour les Web Streams (fetch API)
+async function convertWebStreamToWebp(webStream: ReadableStream) {
+  // Convertir Web Stream en Node.js Stream
+  const nodeStream = Readable.fromWebStream(webStream)
+  
+  // Accumuler en buffer
+  const chunks: Buffer[] = []
+  for await (const chunk of nodeStream) {
+    chunks.push(Buffer.from(chunk))
+  }
+  const imageBuffer = Buffer.concat(chunks)
+  
+  // Convertir en WebP
+  const webpArray = imageToWebp(imageBuffer)
+  return Buffer.from(webpArray)
+}
+
+// Exemple avec fetch
+const response = await fetch('https://example.com/image.png')
+const webpBuffer = await convertWebStreamToWebp(response.body)
+```
+
+#### Méthode 4 : Stream de sortie (pour optimiser la mémoire)
+
+Si tu veux éviter de charger tout le fichier en mémoire, utilise `imageToWebpFromFile` :
+
+```typescript
+import { imageToWebpFromFile } from '@malolebrin/cv-normalizer'
+import { createReadStream, createWriteStream } from 'fs'
+import { pipeline } from 'stream/promises'
+import { Readable } from 'stream'
+
+// Pour un fichier local, utilise directement le chemin
+function convertFileToWebp(inputPath: string, outputPath: string) {
+  const webpArray = imageToWebpFromFile(inputPath)
+  const webpBuffer = Buffer.from(webpArray)
+  
+  // Écrire via stream
+  return pipeline(
+    Readable.from(webpBuffer),
+    createWriteStream(outputPath)
+  )
+}
+
+convertFileToWebp('input.png', 'output.webp')
+```
+
+#### Exemple complet : Pipeline de traitement d'image
+
+```typescript
+import { imageToWebp, optimizeImage } from '@malolebrin/cv-normalizer'
+import { createReadStream, createWriteStream } from 'fs'
+import { pipeline } from 'stream/promises'
+import { Transform } from 'stream'
+
+// Transform stream qui convertit l'image en WebP
+class ImageToWebpTransform extends Transform {
+  private chunks: Buffer[] = []
+
+  _transform(chunk: Buffer, encoding: string, callback: () => void) {
+    this.chunks.push(chunk)
+    callback()
+  }
+
+  async _flush(callback: (error?: Error) => void) {
+    try {
+      const imageBuffer = Buffer.concat(this.chunks)
+      
+      // Option 1: Conversion simple
+      // const webpArray = imageToWebp(imageBuffer)
+      
+      // Option 2: Avec optimisation
+      const webpArray = optimizeImage(imageBuffer, {
+        maxWidth: 1920,
+        quality: 85,
+        format: 'webp',
+      })
+      
+      const webpBuffer = Buffer.from(webpArray)
+      this.push(webpBuffer)
+      callback()
+    } catch (error) {
+      callback(error as Error)
+    }
+  }
+}
+
+// Pipeline complet
+async function processImageStream(inputPath: string, outputPath: string) {
+  await pipeline(
+    createReadStream(inputPath),
+    new ImageToWebpTransform(),
+    createWriteStream(outputPath)
+  )
+}
+
+processImageStream('input.jpg', 'output.webp')
+```
+
+**Recommandations :**
+- Pour les **fichiers locaux** : utilise `imageToWebpFromFile` (plus efficace)
+- Pour les **streams HTTP/network** : convertis en buffer avec `streamToBuffer` puis utilise `imageToWebp`
+- Pour les **grands fichiers** : évite de charger tout en mémoire, utilise `imageToWebpFromFile` si possible
+
 ### Batch Processing
 
 ```typescript
