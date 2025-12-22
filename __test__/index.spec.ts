@@ -8,8 +8,12 @@ import {
   bufferToBase64,
   extractTextFromPdf,
   imageToWebp,
+  imageToWebpFromBase64,
+  imageToWebpFromFile,
   normalizeCvToPdf,
   optimizeImage,
+  optimizeImageFromBase64,
+  optimizeImageFromFile,
 } from '../index'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -196,4 +200,124 @@ test('optimizeImage throws on invalid image', (t) => {
 
   t.is(error?.code, 'InvalidArg')
   t.regex(error?.message ?? '', /Failed to process image/)
+})
+
+test('imageToWebpFromFile converts image from file path to WebP', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+
+  const out = imageToWebpFromFile(imagePath) as Array<number>
+
+  t.true(Array.isArray(out))
+  const webpBuffer = Buffer.from(out)
+  t.true(webpBuffer.length > 0)
+
+  const riff = webpBuffer.subarray(0, 4).toString('ascii')
+  const webpTag = webpBuffer.subarray(8, 12).toString('ascii')
+
+  t.is(riff, 'RIFF')
+  t.is(webpTag, 'WEBP')
+})
+
+test('imageToWebpFromFile throws on non-existent file', (t) => {
+  const error = t.throws(
+    () => {
+      imageToWebpFromFile('/path/that/does/not/exist.jpg')
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Failed to open image file/)
+})
+
+test('imageToWebpFromBase64 converts Base64 image to WebP', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(imagePath)
+  const base64 = bufferToBase64(imageBuffer)
+
+  const out = imageToWebpFromBase64(base64) as Array<number>
+
+  t.true(Array.isArray(out))
+  const webpBuffer = Buffer.from(out)
+  t.true(webpBuffer.length > 0)
+
+  const riff = webpBuffer.subarray(0, 4).toString('ascii')
+  const webpTag = webpBuffer.subarray(8, 12).toString('ascii')
+
+  t.is(riff, 'RIFF')
+  t.is(webpTag, 'WEBP')
+})
+
+test('imageToWebpFromBase64 throws on invalid Base64', (t) => {
+  const error = t.throws(
+    () => {
+      imageToWebpFromBase64('Invalid!@#Base64')
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Failed to decode Base64/)
+})
+
+test('optimizeImageFromFile optimizes image from file path', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+
+  const optimized = optimizeImageFromFile(imagePath, {
+    maxWidth: 100,
+    maxHeight: 0,
+    quality: 80,
+    format: 'jpeg',
+  }) as Array<number>
+
+  t.true(Array.isArray(optimized))
+  const optimizedBuffer = Buffer.from(optimized)
+  t.true(optimizedBuffer.length > 0)
+})
+
+test('optimizeImageFromFile throws on non-existent file', (t) => {
+  const error = t.throws(
+    () => {
+      optimizeImageFromFile('/path/that/does/not/exist.jpg')
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Failed to open image file/)
+})
+
+test('optimizeImageFromBase64 optimizes image from Base64 string', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(imagePath)
+  const base64 = bufferToBase64(imageBuffer)
+
+  const optimized = optimizeImageFromBase64(base64, {
+    maxWidth: 100,
+    maxHeight: 0,
+    quality: 80,
+    format: 'webp',
+  }) as Array<number>
+
+  t.true(Array.isArray(optimized))
+  const optimizedBuffer = Buffer.from(optimized)
+  t.true(optimizedBuffer.length > 0)
+
+  // Check WebP header
+  const riff = optimizedBuffer.subarray(0, 4).toString('ascii')
+  const webpTag = optimizedBuffer.subarray(8, 12).toString('ascii')
+  t.is(riff, 'RIFF')
+  t.is(webpTag, 'WEBP')
+})
+
+test('optimizeImageFromBase64 throws on invalid Base64', (t) => {
+  const error = t.throws(
+    () => {
+      optimizeImageFromBase64('Invalid!@#Base64')
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Failed to decode Base64/)
 })

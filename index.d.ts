@@ -35,8 +35,24 @@ export interface ImageOptimizeOptions {
  *
  * This mirrors the behavior of the Transformer example on the NAPI-RS homepage:
  * it decodes the image from memory and re-encodes it as WebP in memory.
+ *
+ * **Input:** Buffer (Uint8Array) - Binary image data in memory
  */
 export declare function imageToWebp(bytes: Uint8Array): Array<number>
+
+/**
+ * Convert a Base64-encoded image to WebP format.
+ *
+ * **Input:** Base64 string (String) - Base64-encoded image data
+ */
+export declare function imageToWebpFromBase64(base64: string): Array<number>
+
+/**
+ * Convert an image file to WebP format.
+ *
+ * **Input:** File path (String) - Path to the image file on disk
+ */
+export declare function imageToWebpFromFile(path: string): Array<number>
 
 /**
  * Normalize a CV file to PDF and optionally compress it.
@@ -52,4 +68,23 @@ export declare function imageToWebp(bytes: Uint8Array): Array<number>
  */
 export declare function normalizeCvToPdf(bytes: Uint8Array, mime: string): Array<number>
 
+/**
+ * Optimize an image from a buffer.
+ *
+ * **Input:** Buffer (Uint8Array) - Binary image data in memory
+ */
 export declare function optimizeImage(bytes: Uint8Array, options?: ImageOptimizeOptions | undefined | null): Array<number>
+
+/**
+ * Optimize an image from a Base64-encoded string.
+ *
+ * **Input:** Base64 string (String) - Base64-encoded image data
+ */
+export declare function optimizeImageFromBase64(base64: string, options?: ImageOptimizeOptions | undefined | null): Array<number>
+
+/**
+ * Optimize an image from a file path.
+ *
+ * **Input:** File path (String) - Path to the image file on disk
+ */
+export declare function optimizeImageFromFile(path: string, options?: ImageOptimizeOptions | undefined | null): Array<number>

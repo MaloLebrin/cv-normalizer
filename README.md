@@ -52,13 +52,15 @@ A high-performance native Node.js module built with Rust and NAPI-RS, providing 
    - Multi-page support
    - 2-5x faster than `pdf-parse`
 
-3. **Image Optimization** (`optimizeImage`)
+3. **Image Optimization** (`optimizeImage`, `optimizeImageFromFile`, `optimizeImageFromBase64`)
    - Resize images with aspect ratio preservation
    - Format conversion (JPEG, PNG, WebP)
    - Quality control for JPEG compression
+   - Multiple input formats: Buffer, file path, or Base64 string
 
-4. **Image Format Conversion** (`imageToWebp`)
+4. **Image Format Conversion** (`imageToWebp`, `imageToWebpFromFile`, `imageToWebpFromBase64`)
    - Convert any supported image format to WebP
+   - Multiple input formats: Buffer, file path, or Base64 string
    - Memory-efficient streaming conversion
 
 5. **Base64 Utilities** (`bufferToBase64`, `base64ToBuffer`)
@@ -133,12 +135,32 @@ export declare function extractTextFromPdf(
   bytes: Uint8Array,
 ): string
 
+// Image conversion - multiple input formats
 export declare function imageToWebp(
   bytes: Uint8Array,
 ): Array<number>
 
+export declare function imageToWebpFromFile(
+  path: string,
+): Array<number>
+
+export declare function imageToWebpFromBase64(
+  base64: string,
+): Array<number>
+
+// Image optimization - multiple input formats
 export declare function optimizeImage(
   bytes: Uint8Array,
+  options?: ImageOptimizeOptions,
+): Array<number>
+
+export declare function optimizeImageFromFile(
+  path: string,
+  options?: ImageOptimizeOptions,
+): Array<number>
+
+export declare function optimizeImageFromBase64(
+  base64: string,
   options?: ImageOptimizeOptions,
 ): Array<number>
 
@@ -158,6 +180,25 @@ export interface ImageOptimizeOptions {
   format?: string         // 'jpeg' | 'png' | 'webp' | 'auto' (default: 'auto')
 }
 ```
+
+---
+
+### Input Format Options
+
+Many image processing functions support multiple input formats for flexibility:
+
+| Format | Type | Use Case | Performance |
+|--------|------|----------|-------------|
+| **Buffer** (`Uint8Array`) | Binary data in memory | When you already have the file in memory (e.g., from `fs.readFileSync`, HTTP response) | ⚡ Fastest - no I/O or conversion overhead |
+| **File Path** (`string`) | Path to file on disk | When working with local files | 🚀 Fast - direct file access, no memory copy |
+| **Base64** (`string`) | Base64-encoded string | When receiving data from APIs, JSON, or databases | ⚠️ Slower - requires decoding step |
+
+**Recommendations:**
+- Use **Buffer** for in-memory operations (most common)
+- Use **File Path** when processing local files (avoids loading entire file into memory)
+- Use **Base64** only when necessary (APIs, JSON payloads, database storage)
+
+**Note**: Node.js streams can be converted to Buffer using `Buffer.from(stream)` and then used with Buffer-based functions.
 
 ---
 
@@ -262,7 +303,7 @@ console.log(text)
 
 #### `optimizeImage(bytes: Uint8Array, options?: ImageOptimizeOptions): Array<number>`
 
-Optimizes images by resizing and/or compressing them with configurable options.
+Optimizes images by resizing and/or compressing them with configurable options. Accepts image data from a buffer.
 
 **Parameters:**
 - `bytes`: Image file as `Uint8Array` or `Buffer`
@@ -322,7 +363,7 @@ writeFileSync('photo-optimized.webp', Buffer.from(optimized))
 
 #### `imageToWebp(bytes: Uint8Array): Array<number>`
 
-Converts any supported image format to WebP. This is a simple wrapper that decodes the image and re-encodes it as WebP.
+Converts any supported image format to WebP from a buffer. This is a simple wrapper that decodes the image and re-encodes it as WebP.
 
 **Parameters:**
 - `bytes`: Image file as `Uint8Array` or `Buffer`
@@ -345,6 +386,152 @@ writeFileSync('image.webp', webpBuffer)
 
 **Error Handling:**
 - Throws `Error` with `code: 'InvalidArg'` if image cannot be decoded
+
+---
+
+#### `optimizeImageFromFile(path: string, options?: ImageOptimizeOptions): Array<number>`
+
+Optimizes images by reading directly from a file path. More memory-efficient for large files.
+
+**Parameters:**
+- `path`: File path to the image file (e.g., `'./photo.jpg'`)
+- `options`: Optional configuration object (same as `optimizeImage`)
+
+**Returns:** `Array<number>` - Optimized image bytes
+
+**Benefits:**
+- Avoids loading entire file into memory before processing
+- Better for batch processing large numbers of files
+- Direct file system access
+
+**Example:**
+```typescript
+import { optimizeImageFromFile } from '@malolebrin/cv-normalizer'
+import { writeFileSync } from 'fs'
+
+const optimized = optimizeImageFromFile('./large-photo.jpg', {
+  maxWidth: 1920,
+  maxHeight: 1080,
+  quality: 85,
+  format: 'webp',
+})
+
+writeFileSync('photo-optimized.webp', Buffer.from(optimized))
+```
+
+**Error Handling:**
+- Throws `Error` with `code: 'InvalidArg'` if file cannot be opened or image cannot be decoded
+- Error message includes the file path for debugging
+
+---
+
+#### `optimizeImageFromBase64(base64: string, options?: ImageOptimizeOptions): Array<number>`
+
+Optimizes images from a Base64-encoded string. Useful for processing images received from APIs or stored in databases.
+
+**Parameters:**
+- `base64`: Base64-encoded image string
+- `options`: Optional configuration object (same as `optimizeImage`)
+
+**Returns:** `Array<number>` - Optimized image bytes
+
+**Use Cases:**
+- Processing images from REST API responses
+- Optimizing images stored as Base64 in JSON/databases
+- Working with data URLs
+
+**Example:**
+```typescript
+import { optimizeImageFromBase64, bufferToBase64 } from '@malolebrin/cv-normalizer'
+import { readFileSync, writeFileSync } from 'fs'
+
+// From API or database
+const base64Image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2O0AAAAASUVORK5CYII='
+
+const optimized = optimizeImageFromBase64(base64Image, {
+  maxWidth: 800,
+  quality: 80,
+  format: 'webp',
+})
+
+writeFileSync('optimized.webp', Buffer.from(optimized))
+
+// Or convert existing buffer to Base64 first
+const imageBuffer = readFileSync('photo.jpg')
+const base64 = bufferToBase64(imageBuffer)
+const optimizedFromBase64 = optimizeImageFromBase64(base64, {
+  maxWidth: 1920,
+  format: 'webp',
+})
+```
+
+**Error Handling:**
+- Throws `Error` with `code: 'InvalidArg'` if Base64 string is invalid or image cannot be decoded
+
+---
+
+#### `imageToWebpFromFile(path: string): Array<number>`
+
+Converts an image file to WebP format by reading directly from disk.
+
+**Parameters:**
+- `path`: File path to the image file (e.g., `'./image.png'`)
+
+**Returns:** `Array<number>` - WebP image bytes
+
+**Benefits:**
+- Avoids loading entire file into memory
+- More efficient for large files
+- Direct file system access
+
+**Example:**
+```typescript
+import { imageToWebpFromFile } from '@malolebrin/cv-normalizer'
+import { writeFileSync } from 'fs'
+
+const webpBuffer = Buffer.from(imageToWebpFromFile('./image.png'))
+writeFileSync('image.webp', webpBuffer)
+```
+
+**Error Handling:**
+- Throws `Error` with `code: 'InvalidArg'` if file cannot be opened or image cannot be decoded
+- Error message includes the file path for debugging
+
+---
+
+#### `imageToWebpFromBase64(base64: string): Array<number>`
+
+Converts a Base64-encoded image string to WebP format.
+
+**Parameters:**
+- `base64`: Base64-encoded image string (e.g., from API responses, JSON, or database)
+
+**Returns:** `Array<number>` - WebP image bytes
+
+**Use Cases:**
+- Processing images received from REST APIs
+- Converting images stored in JSON/database as Base64
+- Working with data URLs (`data:image/png;base64,...`)
+
+**Example:**
+```typescript
+import { imageToWebpFromBase64, bufferToBase64 } from '@malolebrin/cv-normalizer'
+import { readFileSync, writeFileSync } from 'fs'
+
+// From API response or database
+const base64Image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2O0AAAAASUVORK5CYII='
+
+const webpBuffer = Buffer.from(imageToWebpFromBase64(base64Image))
+writeFileSync('image.webp', webpBuffer)
+
+// Or convert existing buffer to Base64 first
+const pngBuffer = readFileSync('image.png')
+const base64 = bufferToBase64(pngBuffer)
+const webpFromBase64 = Buffer.from(imageToWebpFromBase64(base64))
+```
+
+**Error Handling:**
+- Throws `Error` with `code: 'InvalidArg'` if Base64 string is invalid or image cannot be decoded
 
 ---
 
@@ -438,13 +625,35 @@ console.log(`Extracted text: ${result.text.substring(0, 100)}...`)
 ### Image Optimization for Web
 
 ```typescript
-import { optimizeImage } from '@malolebrin/cv-normalizer'
-import { readFileSync, writeFileSync } from 'fs'
+import { optimizeImage, optimizeImageFromFile } from '@malolebrin/cv-normalizer'
+import { writeFileSync } from 'fs'
 
-function optimizeForWeb(inputPath: string, outputPath: string) {
+// Option 1: Using file path (more memory-efficient)
+function optimizeForWebFromFile(inputPath: string, outputPath: string) {
+  const sizes = [
+    { width: 1920, suffix: '-large' },
+    { width: 1280, suffix: '-medium' },
+    { width: 640, suffix: '-small' },
+  ]
+
+  for (const { width, suffix } of sizes) {
+    const optimized = optimizeImageFromFile(inputPath, {
+      maxWidth: width,
+      quality: 85,
+      format: 'webp',
+    })
+
+    const baseName = outputPath.replace(/\.[^.]+$/, '')
+    writeFileSync(`${baseName}${suffix}.webp`, Buffer.from(optimized))
+  }
+}
+
+// Option 2: Using buffer (when file is already in memory)
+import { readFileSync } from 'fs'
+
+function optimizeForWebFromBuffer(inputPath: string, outputPath: string) {
   const image = readFileSync(inputPath)
 
-  // Create multiple sizes
   const sizes = [
     { width: 1920, suffix: '-large' },
     { width: 1280, suffix: '-medium' },
@@ -463,7 +672,32 @@ function optimizeForWeb(inputPath: string, outputPath: string) {
   }
 }
 
-optimizeForWeb('photo.jpg', 'photo.webp')
+optimizeForWebFromFile('photo.jpg', 'photo.webp')
+```
+
+### Processing Images from APIs (Base64)
+
+```typescript
+import { optimizeImageFromBase64, imageToWebpFromBase64 } from '@malolebrin/cv-normalizer'
+import { writeFileSync } from 'fs'
+
+// Example: Processing image from REST API response
+async function processImageFromAPI(apiResponse: { image: string }) {
+  // API returns Base64-encoded image
+  const base64Image = apiResponse.image
+
+  // Convert to WebP
+  const webpBuffer = Buffer.from(imageToWebpFromBase64(base64Image))
+  writeFileSync('api-image.webp', webpBuffer)
+
+  // Or optimize it
+  const optimized = optimizeImageFromBase64(base64Image, {
+    maxWidth: 1920,
+    quality: 85,
+    format: 'webp',
+  })
+  writeFileSync('api-image-optimized.webp', Buffer.from(optimized))
+}
 ```
 
 ### Batch Processing
