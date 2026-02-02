@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exemple d'utilisation d'images responsive</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Exemples d'images responsive avec srcset</h1>
+
+  <h2>Exemple 1 : Image simple avec srcset</h2>
+  <p>Le navigateur choisira automatiquement la meilleure taille selon la largeur de l'écran.</p>
+  <img
+    src="photo-1920w.webp"
+    srcset="
+      photo-320w.webp 320w,
+      photo-640w.webp 640w,
+      photo-1024w.webp 1024w,
+      photo-1920w.webp 1920w
+    "
+    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+    alt="Photo responsive"
+  />
+
+  <h2>Exemple 2 : Image avec sizes personnalisé</h2>
+  <p>Pour une image pleine largeur sur mobile, 50% sur tablette, et 33% sur desktop.</p>
+  <img
+    src="photo-1920w.webp"
+    srcset="
+      photo-320w.webp 320w,
+      photo-640w.webp 640w,
+      photo-1024w.webp 1024w,
+      photo-1920w.webp 1920w
+    "
+    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+    alt="Photo avec sizes personnalisé"
+  />
+
+  <h2>Exemple 3 : Picture element (plus de contrôle)</h2>
+  <p>Permet de spécifier différentes images selon les media queries.</p>
+  <picture>
+    <source
+      media="(max-width: 640px)"
+      srcset="photo-320w.webp, photo-640w.webp 2x"
+      type="image/webp"
+    />
+    <source
+      media="(max-width: 1024px)"
+      srcset="photo-640w.webp, photo-1024w.webp 2x"
+      type="image/webp"
+    />
+    <source
+      srcset="photo-1024w.webp, photo-1920w.webp 2x"
+      type="image/webp"
+    />
+    <img src="photo-1920w.webp" alt="Photo avec picture element" />
+  </picture>
+
+  <h2>Exemple 4 : Image avec lazy loading</h2>
+  <p>Pour améliorer les performances, chargez les images uniquement quand elles sont visibles.</p>
+  <img
+    src="photo-1920w.webp"
+    srcset="
+      photo-320w.webp 320w,
+      photo-640w.webp 640w,
+      photo-1024w.webp 1024w,
+      photo-1920w.webp 1920w
+    "
+    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+    loading="lazy"
+    alt="Photo avec lazy loading"
+  />
+
+  <h2>Explication des attributs</h2>
+  <ul>
+    <li><strong>src</strong> : Image de fallback pour les navigateurs qui ne supportent pas srcset</li>
+    <li><strong>srcset</strong> : Liste des images disponibles avec leur largeur (ex: "photo-320w.webp 320w")</li>
+    <li><strong>sizes</strong> : Indique au navigateur quelle taille d'image utiliser selon la largeur de l'écran</li>
+    <li><strong>loading="lazy"</strong> : Charge l'image uniquement quand elle est proche de la zone visible</li>
+  </ul>
+
+  <h2>Breakpoints recommandés</h2>
+  <ul>
+    <li><strong>320w</strong> : Petits mobiles</li>
+    <li><strong>640w</strong> : Grands mobiles / petites tablettes</li>
+    <li><strong>1024w</strong> : Tablettes / petits écrans</li>
+    <li><strong>1920w</strong> : Desktop / grands écrans</li>
+  </ul>
+</body>
+</html>
+
+

@@ -574,6 +574,7 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.base64ToBuffer = nativeBinding.base64ToBuffer
 module.exports.bufferToBase64 = nativeBinding.bufferToBase64
+module.exports.convertImagesToWebpRecursive = nativeBinding.convertImagesToWebpRecursive
 module.exports.extractTextFromPdf = nativeBinding.extractTextFromPdf
 module.exports.imageToWebp = nativeBinding.imageToWebp
 module.exports.imageToWebpFromBase64 = nativeBinding.imageToWebpFromBase64

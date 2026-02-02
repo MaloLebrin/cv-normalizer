@@ -6,6 +6,31 @@ export declare function base64ToBuffer(base64: string): Array<number>
 /** Convert a buffer to Base64 string. */
 export declare function bufferToBase64(buffer: Uint8Array): string
 
+/** Statistics about the conversion process. */
+export interface ConversionStats {
+  /** Number of files successfully converted */
+  converted: number
+  /** Number of files skipped (already WebP or not an image) */
+  skipped: number
+  /** Number of files that failed to convert */
+  errors: number
+  /** List of error messages for failed conversions */
+  errorMessages: Array<string>
+}
+
+/**
+ * Convert all images in a directory (and subdirectories) to WebP format.
+ *
+ * This function recursively walks through the directory tree and converts
+ * all supported image formats to WebP. Files that are already WebP are skipped.
+ * Original files are preserved (not deleted).
+ *
+ * **Input:** Directory path (String) - Path to the parent directory
+ *
+ * **Returns:** Statistics about the conversion process
+ */
+export declare function convertImagesToWebpRecursive(dirPath: string): ConversionStats
+
 /**
  * Extract text content from a PDF document.
  *

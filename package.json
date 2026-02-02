@@ -52,6 +52,8 @@
     "prepublishOnly": "napi prepublish -t npm",
     "test": "ava",
     "demo": "node scripts/normalize-file.cjs",
+    "convert-to-webp": "node scripts/convert-to-webp.cjs",
+    "resize-webp": "node scripts/resize-webp.cjs",
     "preversion": "napi build --platform && git add .",
     "version": "napi version",
     "prepare": "husky"

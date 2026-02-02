@@ -1,11 +1,12 @@
 import test from 'ava'
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
   base64ToBuffer,
   bufferToBase64,
+  convertImagesToWebpRecursive,
   extractTextFromPdf,
   imageToWebp,
   imageToWebpFromBase64,
@@ -320,4 +321,133 @@ test('optimizeImageFromBase64 throws on invalid Base64', (t) => {
 
   t.is(error?.code, 'InvalidArg')
   t.regex(error?.message ?? '', /Failed to decode Base64/)
+})
+
+test('convertImagesToWebpRecursive converts images in directory recursively', (t) => {
+  // Create a temporary test directory structure
+  const testDir = path.join(__dirname, 'test-convert-dir')
+  const subDir = path.join(testDir, 'subdir')
+  
+  // Clean up if exists
+  if (existsSync(testDir)) {
+    rmSync(testDir, { recursive: true, force: true })
+  }
+  
+  mkdirSync(testDir, { recursive: true })
+  mkdirSync(subDir, { recursive: true })
+
+  // Copy test image to multiple locations
+  // Use the same JPEG file for all tests since we're testing conversion, not format validation
+  const sourceImage = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(sourceImage)
+  
+  const image1 = path.join(testDir, 'test1.jpg')
+  const image2 = path.join(testDir, 'test2.jpg') // Changed from .png to .jpg to avoid format mismatch
+  const image3 = path.join(subDir, 'test3.jpg')
+  
+  writeFileSync(image1, imageBuffer)
+  writeFileSync(image2, imageBuffer)
+  writeFileSync(image3, imageBuffer)
+
+  // Run conversion
+  const stats = convertImagesToWebpRecursive(testDir) as {
+    converted: number
+    skipped: number
+    errors: number
+    errorMessages: string[]
+  }
+
+  // Check stats
+  t.is(typeof stats.converted, 'number')
+  t.is(typeof stats.skipped, 'number')
+  t.is(typeof stats.errors, 'number')
+  t.true(Array.isArray(stats.errorMessages))
+  t.true(stats.converted >= 3) // At least 3 images should be converted
+  t.is(stats.errors, 0) // No errors expected
+
+  // Verify WebP files were created
+  const webp1 = path.join(testDir, 'test1.webp')
+  const webp2 = path.join(testDir, 'test2.webp') // Changed to match new filename
+  const webp3 = path.join(subDir, 'test3.webp')
+
+  t.true(existsSync(webp1))
+  t.true(existsSync(webp2))
+  t.true(existsSync(webp3))
+
+  // Verify WebP files are valid
+  const webpBuffer1 = readFileSync(webp1)
+  const riff = webpBuffer1.subarray(0, 4).toString('ascii')
+  const webpTag = webpBuffer1.subarray(8, 12).toString('ascii')
+  t.is(riff, 'RIFF')
+  t.is(webpTag, 'WEBP')
+
+  // Verify original files still exist
+  t.true(existsSync(image1))
+  t.true(existsSync(image2))
+  t.true(existsSync(image3))
+
+  // Clean up
+  rmSync(testDir, { recursive: true, force: true })
+})
+
+test('convertImagesToWebpRecursive skips existing WebP files', (t) => {
+  const testDir = path.join(__dirname, 'test-skip-dir')
+  
+  if (existsSync(testDir)) {
+    rmSync(testDir, { recursive: true, force: true })
+  }
+  
+  mkdirSync(testDir, { recursive: true })
+
+  const sourceImage = path.join(__dirname, 'image.jpg')
+  const imageBuffer = readFileSync(sourceImage)
+  
+  // Create a JPG file and a separate WebP file (different name) to test skipping
+  const jpgFile = path.join(testDir, 'test.jpg')
+  const existingWebpFile = path.join(testDir, 'existing.webp') // Different name
+  
+  writeFileSync(jpgFile, imageBuffer)
+  
+  // Create an existing WebP file with a different name to test skipping
+  const webpData = imageToWebpFromFile(sourceImage) as Array<number>
+  writeFileSync(existingWebpFile, Buffer.from(webpData))
+
+  const stats = convertImagesToWebpRecursive(testDir) as {
+    converted: number
+    skipped: number
+    errors: number
+  }
+
+  // Should convert the JPG but skip the existing WebP
+  t.true(stats.converted >= 1)
+  t.true(stats.skipped >= 1) // At least the existing WebP should be skipped
+
+  // Clean up
+  rmSync(testDir, { recursive: true, force: true })
+})
+
+test('convertImagesToWebpRecursive throws on non-existent directory', (t) => {
+  const error = t.throws(
+    () => {
+      convertImagesToWebpRecursive('/path/that/does/not/exist')
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Directory does not exist/)
+})
+
+test('convertImagesToWebpRecursive throws on file path (not directory)', (t) => {
+  const imagePath = path.join(__dirname, 'image.jpg')
+  
+  const error = t.throws(
+    () => {
+      convertImagesToWebpRecursive(imagePath)
+    },
+    { instanceOf: Error },
+  )
+
+  t.is(error?.code, 'InvalidArg')
+  t.regex(error?.message ?? '', /Path is not a directory/)
 })

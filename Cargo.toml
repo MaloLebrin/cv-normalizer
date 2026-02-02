@@ -11,10 +11,12 @@ crate-type = ["cdylib"]
 [dependencies]
 napi = "3.0.0"
 napi-derive = "3.0.0"
+exif = { package = "kamadak-exif", version = "0.6" }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 tempfile = "3.10"
 pdf-extract = "0.7"
 base64 = "0.22"
+walkdir = "2"
 
 [build-dependencies]
 napi-build = "2"

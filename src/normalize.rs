@@ -7,7 +7,7 @@ use napi::bindgen_prelude::Uint8Array;
 use napi::{Error, Status};
 use napi_derive::napi;
 
-use crate::image::encode_to_jpeg;
+use crate::image::{encode_to_jpeg, load_image_with_orientation};
 use crate::pdf::try_optimize_pdf_with_ghostscript;
 use crate::utils::{calculate_target_size, is_pdf_mime, is_supported_image_mime, map_image_error};
 
@@ -45,7 +45,7 @@ pub fn normalize_cv_to_pdf(bytes: Uint8Array, mime: String) -> napi::Result<Vec<
     return Ok(input);
   }
 
-  let img = image::load_from_memory(&input).map_err(map_image_error)?;
+  let img = load_image_with_orientation(&input).map_err(map_image_error)?;
 
   // Basic downscaling to avoid huge PDFs: keep longest side <= 2000px
   let max_side: u32 = 2000;
