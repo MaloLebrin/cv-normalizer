@@ -31,16 +31,18 @@ fn orientation_from_exif_bytes(bytes: &[u8]) -> Option<ImageOrientation> {
 /// (no sideways or upside-down output when re-encoding to WebP or other formats).
 /// Uses the exif crate to read orientation when the decoder does not provide it.
 pub(crate) fn load_image_with_orientation(bytes: &[u8]) -> Result<DynamicImage, image::ImageError> {
-  let orientation_from_exif = orientation_from_exif_bytes(bytes);
-
   let reader = ImageReader::new(Cursor::new(bytes))
     .with_guessed_format()
     .map_err(image::ImageError::IoError)?;
   let mut decoder = reader.into_decoder()?;
-  let orientation_from_decoder = decoder.orientation().ok();
-  let orientation = orientation_from_exif
-    .or(orientation_from_decoder)
-    .unwrap_or(ImageOrientation::NoTransforms);
+
+  // Try to get orientation from decoder first (more reliable integration)
+  let orientation = if let Ok(orientation) = decoder.orientation() {
+    orientation
+  } else {
+    // If decoder fails or returns None, fall back to manual EXIF reading
+    orientation_from_exif_bytes(bytes).unwrap_or(ImageOrientation::NoTransforms)
+  };
 
   let mut img = DynamicImage::from_decoder(decoder)?;
   img.apply_orientation(orientation);
@@ -50,16 +52,18 @@ pub(crate) fn load_image_with_orientation(bytes: &[u8]) -> Result<DynamicImage, 
 /// Load an image from a file path and apply EXIF orientation.
 fn load_image_with_orientation_from_path(path: &Path) -> Result<DynamicImage, image::ImageError> {
   let bytes = fs::read(path).map_err(image::ImageError::IoError)?;
-  let orientation_from_exif = orientation_from_exif_bytes(&bytes);
-
   let reader = ImageReader::new(Cursor::new(&bytes))
     .with_guessed_format()
     .map_err(image::ImageError::IoError)?;
   let mut decoder = reader.into_decoder()?;
-  let orientation_from_decoder = decoder.orientation().ok();
-  let orientation = orientation_from_exif
-    .or(orientation_from_decoder)
-    .unwrap_or(ImageOrientation::NoTransforms);
+
+  // Try to get orientation from decoder first
+  let orientation = if let Ok(orientation) = decoder.orientation() {
+    orientation
+  } else {
+    // Fall back to manual EXIF reading if decoder doesn't provide it
+    orientation_from_exif_bytes(&bytes).unwrap_or(ImageOrientation::NoTransforms)
+  };
 
   let mut img = DynamicImage::from_decoder(decoder)?;
   img.apply_orientation(orientation);
@@ -185,7 +189,7 @@ pub fn optimize_image(
       // No constraints (shouldn't happen due to condition above)
       orig_w.max(orig_h)
     };
-    
+
     let (final_w, final_h) = calculate_target_size(orig_w, orig_h, max_side);
     img.resize_exact(final_w, final_h, FilterType::Lanczos3)
   } else {
@@ -275,7 +279,7 @@ pub fn optimize_image_from_file(
       // No constraints (shouldn't happen due to condition above)
       orig_w.max(orig_h)
     };
-    
+
     let (final_w, final_h) = calculate_target_size(orig_w, orig_h, max_side);
     img.resize_exact(final_w, final_h, FilterType::Lanczos3)
   } else {
@@ -364,7 +368,7 @@ pub fn optimize_image_from_base64(
       // No constraints (shouldn't happen due to condition above)
       orig_w.max(orig_h)
     };
-    
+
     let (final_w, final_h) = calculate_target_size(orig_w, orig_h, max_side);
     img.resize_exact(final_w, final_h, FilterType::Lanczos3)
   } else {
@@ -516,7 +520,10 @@ pub fn convert_images_to_webp_recursive(dir_path: String) -> napi::Result<Conver
     // If format detection fails, try to open the file anyway
     let format_opt = ImageFormat::from_extension(&ext);
     let is_potential_image = format_opt.is_some()
-      || matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "bmp" | "ico" | "tiff" | "tif");
+      || matches!(
+        ext.as_str(),
+        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "ico" | "tiff" | "tif"
+      );
 
     if !is_potential_image {
       skipped += 1;
@@ -532,33 +539,29 @@ pub fn convert_images_to_webp_recursive(dir_path: String) -> napi::Result<Conver
 
     // Try to convert the image (this will fail if it's not a valid image)
     match load_image_with_orientation_from_path(file_path) {
-      Ok(img) => {
-        match encode_to_webp_optimized(&img) {
-          Ok(webp_data) => {
-            match fs::write(&webp_path, webp_data) {
-              Ok(_) => {
-                converted += 1;
-              }
-              Err(e) => {
-                errors += 1;
-                error_messages.push(format!(
-                  "Failed to write WebP file '{}': {}",
-                  webp_path.display(),
-                  e
-                ));
-              }
-            }
+      Ok(img) => match encode_to_webp_optimized(&img) {
+        Ok(webp_data) => match fs::write(&webp_path, webp_data) {
+          Ok(_) => {
+            converted += 1;
           }
           Err(e) => {
             errors += 1;
             error_messages.push(format!(
-              "Failed to encode WebP for '{}': {}",
-              file_path.display(),
+              "Failed to write WebP file '{}': {}",
+              webp_path.display(),
               e
             ));
           }
+        },
+        Err(e) => {
+          errors += 1;
+          error_messages.push(format!(
+            "Failed to encode WebP for '{}': {}",
+            file_path.display(),
+            e
+          ));
         }
-      }
+      },
       Err(e) => {
         errors += 1;
         error_messages.push(format!(
