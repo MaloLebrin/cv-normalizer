@@ -31,16 +31,18 @@ fn orientation_from_exif_bytes(bytes: &[u8]) -> Option<ImageOrientation> {
 /// (no sideways or upside-down output when re-encoding to WebP or other formats).
 /// Uses the exif crate to read orientation when the decoder does not provide it.
 pub(crate) fn load_image_with_orientation(bytes: &[u8]) -> Result<DynamicImage, image::ImageError> {
-  let orientation_from_exif = orientation_from_exif_bytes(bytes);
-
   let reader = ImageReader::new(Cursor::new(bytes))
     .with_guessed_format()
     .map_err(image::ImageError::IoError)?;
   let mut decoder = reader.into_decoder()?;
-  let orientation_from_decoder = decoder.orientation().ok();
-  let orientation = orientation_from_exif
-    .or(orientation_from_decoder)
-    .unwrap_or(ImageOrientation::NoTransforms);
+  
+  // Try to get orientation from decoder first (more reliable integration)
+  let orientation = if let Ok(orientation) = decoder.orientation() {
+    orientation
+  } else {
+    // If decoder fails or returns None, fall back to manual EXIF reading
+    orientation_from_exif_bytes(bytes).unwrap_or(ImageOrientation::NoTransforms)
+  };
 
   let mut img = DynamicImage::from_decoder(decoder)?;
   img.apply_orientation(orientation);
@@ -50,16 +52,18 @@ pub(crate) fn load_image_with_orientation(bytes: &[u8]) -> Result<DynamicImage, 
 /// Load an image from a file path and apply EXIF orientation.
 fn load_image_with_orientation_from_path(path: &Path) -> Result<DynamicImage, image::ImageError> {
   let bytes = fs::read(path).map_err(image::ImageError::IoError)?;
-  let orientation_from_exif = orientation_from_exif_bytes(&bytes);
-
   let reader = ImageReader::new(Cursor::new(&bytes))
     .with_guessed_format()
     .map_err(image::ImageError::IoError)?;
   let mut decoder = reader.into_decoder()?;
-  let orientation_from_decoder = decoder.orientation().ok();
-  let orientation = orientation_from_exif
-    .or(orientation_from_decoder)
-    .unwrap_or(ImageOrientation::NoTransforms);
+
+  // Try to get orientation from decoder first
+  let orientation = if let Ok(orientation) = decoder.orientation() {
+    orientation
+  } else {
+    // Fall back to manual EXIF reading if decoder doesn't provide it
+    orientation_from_exif_bytes(&bytes).unwrap_or(ImageOrientation::NoTransforms)
+  };
 
   let mut img = DynamicImage::from_decoder(decoder)?;
   img.apply_orientation(orientation);
